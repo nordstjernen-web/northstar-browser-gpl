@@ -19,9 +19,6 @@
 #include "security.h"
 #include "version.h"
 #include "image.h"
-#ifdef __APPLE__
-#include "macos_dock.h"
-#endif
 
 #include <stdlib.h>
 #include <string.h>
@@ -1932,9 +1929,6 @@ on_proc_activate(GtkApplication *app, gpointer user_data)
     ProcAppCtx *ctx = user_data;
     install_icon_search_paths();
     gtk_window_set_default_icon_name("northstar");
-#ifdef __APPLE__
-    ns_macos_set_dock_icon();
-#endif
     install_status_css();
     ProcWindow *pw = proc_window_new(app, "about:start");
     pw->session_path = g_strdup(ctx->session_path);
