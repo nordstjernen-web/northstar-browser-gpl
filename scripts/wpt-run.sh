@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nordstjernen web-platform-tests (WPT) runner.
+# Northstar web-platform-tests (WPT) runner.
 #
 # Drives testharness.js tests from a web-platform-tests checkout through the
 # browser's headless --wpt mode, which injects a completion hook before any
@@ -26,12 +26,12 @@
 #   --list            print the enumerated test URLs and exit
 #
 # Environment overrides:
-#   NS_BIN       browser binary (default builddir/src/gtk/nordstjernen)
+#   NS_BIN       browser binary (default builddir/src/gtk/northstar)
 #   NS_WPT_ROOT  default for --wpt-root
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BIN=${NS_BIN:-$ROOT/builddir/src/gtk/nordstjernen}
+BIN=${NS_BIN:-$ROOT/builddir/src/gtk/northstar}
 export NS_ALLOW_ROOT=${NS_ALLOW_ROOT:-1}
 WPT_ROOT=${NS_WPT_ROOT:-}
 BASE="http://web-platform.test:8000"

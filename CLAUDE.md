@@ -1,10 +1,10 @@
-# Nordstjernen — Claude operating guide
+# Northstar — Claude operating guide
 
-Nordstjernen ("Nordstjernen Web Navigator") is a web
+Northstar ("Northstar Web Navigator") is a web
 browser written from scratch in **C**, using **GTK 4** for the UI and
 **libcurl** for networking. Targets **Linux** (and Windows).
 
-See `README.md` for the product vision. Nordstjernen is a fresh
+See `README.md` for the product vision. Northstar is a fresh
 implementation — there is no upstream browser engine, no fork,
 nothing imported.
 
@@ -14,9 +14,9 @@ This is the minimalist desktop edition. The following have been
 **removed** from the codebase and must not be reintroduced without an
 explicit request: tabs and the process-per-tab architecture (rendering is
 always single-process, in the shell process), WebGL, WebGPU, inline video
-and the `nordstjernen-video` helper (audio playback is kept), the inline
+and the `northstar-video` helper (audio playback is kept), the inline
 PDF viewer (poppler), WebP decoding, and the Android, Java, macOS and iOS
-builds and the embeddable `libnordstjernen` library API. The build targets
+builds and the embeddable `libnorthstar` library API. The build targets
 Linux (primary) and Windows; only the `linux.yml` (gcc) and `windows.yml`
 CI workflows remain. Much of the prose below still describes the full
 project — where it conflicts with this scope note, this note wins.
@@ -55,7 +55,7 @@ project — where it conflicts with this scope note, this note wins.
   stream plays **inline** — frames are decoded in the sandboxed renderer
   and advanced off the animation tick (`src/video.c`), honouring
   `autoplay`/`loop`/`muted`/`poster` and click-to-play/pause. Audio plays
-  via the unsandboxed `nordstjernen-audio` helper (`src/audio/main.c`),
+  via the unsandboxed `northstar-audio` helper (`src/audio/main.c`),
   which decodes in-tree — pl_mpeg for the MPEG-1/MP2 track, the vendored
   CC0 [minimp3](https://github.com/lieff/minimp3) (`src/audio/minimp3.h`)
   for standalone `.mp3` files — and outputs through SDL2's audio device
@@ -63,9 +63,9 @@ project — where it conflicts with this scope note, this note wins.
   renderer emits `open`/`play`/`pause`/`seek`/`stop`/`loop`/`volume`
   commands that ride the render-response `X-Audio` side-channel to the
   shell, which spawns and pumps the helper (`src/gtk/procview.c`).
-  MSE video frames decode in a third process, `nordstjernen-video`
+  MSE video frames decode in a third process, `northstar-video`
   (`src/videoproc/main.c`, built when libav is present): the renderer
-  materializes the growing stream to `~/.cache/nordstjernen/msvideo/`
+  materializes the growing stream to `~/.cache/northstar/msvideo/`
   and drives it with `video …` lines on the same side-channel; the
   helper writes BGRA frames into a shm ring that the shell composites
   over the page surface each tick (see `docs/media.md`). Without the
@@ -137,7 +137,7 @@ This repo is driven by Claude in long uninterrupted sessions.
   driven from either a Linux box (GTK 4 / libcurl / meson / clang +
   an X session at `DISPLAY=:0`) or a Windows 11 box via MSYS2
   MINGW64 (same toolchain, same meson/ninja invocation; the binary
-  is `./builddir/src/gtk/nordstjernen.exe`). Every commit must pass
+  is `./builddir/src/gtk/northstar.exe`). Every commit must pass
   `meson compile -C builddir` locally before pushing. Smoke-launch
   the browser (in the background, then kill it) on material changes
   — that's the per-change correctness gate, not CI. See
@@ -156,7 +156,7 @@ The intended build system is **meson + ninja**. From a clean checkout:
 ```sh
 meson setup builddir
 meson compile -C builddir
-./builddir/src/gtk/nordstjernen
+./builddir/src/gtk/northstar
 ```
 
 The JavaScript engine is
@@ -328,7 +328,7 @@ don't add `meson test` targets.
 ## Don't
 
 - Don't introduce Mozilla/Gecko code, WebKit code, or any other
-  upstream browser engine source. Nordstjernen is an independent
+  upstream browser engine source. Northstar is an independent
   implementation, not a fork.
 - **Don't add site-specific hacks.** No per-site rendering shims, no
   hardcoded hostnames, no grepping a site's private JSON (e.g.

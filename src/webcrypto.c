@@ -1,4 +1,4 @@
-/* Nordstjernen — SubtleCrypto primitives implemented over OpenSSL libcrypto.
+/* Northstar — SubtleCrypto primitives implemented over OpenSSL libcrypto.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

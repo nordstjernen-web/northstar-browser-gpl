@@ -1,4 +1,4 @@
-/* Nordstjernen — in-process debug event log shared with the JS console.
+/* Northstar — in-process debug event log shared with the JS console.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -47,8 +47,8 @@ ns_debug_log_file_path(void)
             g_dlog_file_path = g_strdup(override);
         else
             g_dlog_file_path = g_build_filename(g_get_user_data_dir(),
-                                                "Nordstjernen",
-                                                "nordstjernen-debug.log", NULL);
+                                                "Northstar",
+                                                "northstar-debug.log", NULL);
     }
     return g_dlog_file_path;
 }

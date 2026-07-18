@@ -1,4 +1,4 @@
-/* Nordstjernen — local on-CPU chat inference over llama.cpp.
+/* Northstar — local on-CPU chat inference over llama.cpp.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -69,7 +69,7 @@ ns_ai_shutdown(void)
 #define NS_AI_HISTORY_MAX     16
 #define NS_AI_IDLE_UNLOAD_US  (5 * 60 * G_USEC_PER_SEC)
 #define NS_AI_SYSTEM_PROMPT \
-    "You are the assistant built into the Nordstjernen web browser. " \
+    "You are the assistant built into the Northstar web browser. " \
     "By default, answer the user directly, concisely, and helpfully in the " \
     "language they write in. Greetings, small talk, opinions, and anything " \
     "you already know: just answer in plain prose \xe2\x80\x94 do NOT use a " \
@@ -81,7 +81,7 @@ ns_ai_shutdown(void)
     "facts, news, prices, or a web lookup. When in doubt, answer directly " \
     "instead of using a tool. Never describe or mention the tools."
 #define NS_AI_ANSWER_PROMPT \
-    "You are the assistant built into the Nordstjernen web browser. Answer " \
+    "You are the assistant built into the Northstar web browser. Answer " \
     "the user's request using the web search results provided, in the " \
     "language the user writes in. Be concise. Cite sources inline as " \
     "markdown links like [title](https://url). Do not mention tools and do " \
@@ -285,7 +285,7 @@ ns_ai_active_model_locked(void)
 static char *
 ns_ai_active_path(void)
 {
-    const char *env = g_getenv("NORDSTJERNEN_AI_MODEL");
+    const char *env = g_getenv("NORTHSTAR_AI_MODEL");
     if (env && *env && g_file_test(env, G_FILE_TEST_IS_REGULAR))
         return g_strdup(env);
 
@@ -436,7 +436,7 @@ ns_ai_download_thread(gpointer data)
             g_remove(part);
         } else {
             if (!job->sha256)
-                g_message("nordstjernen-ai: downloaded %s sha256=%s "
+                g_message("northstar-ai: downloaded %s sha256=%s "
                           "(unpinned; add this digest to k_models to pin it)",
                           job->path, hex);
         }
@@ -481,7 +481,7 @@ ns_ai_select_download(const char *model_id)
     g_active_id = g_strdup(m->id);
 
     if (!ns_ai_model_installed(m) && !g_downloading) {
-        const char *env = g_getenv("NORDSTJERNEN_AI_MODEL_URL");
+        const char *env = g_getenv("NORTHSTAR_AI_MODEL_URL");
         job = g_new0(ns_ai_dl_job, 1);
         if (env && *env) {
             job->url = g_strdup(env);
@@ -1223,7 +1223,7 @@ ns_ai_plan_gpu_offload(const char *path, int n_layers, char **device_out)
 {
     *device_out = NULL;
 
-    const char *env = g_getenv("NORDSTJERNEN_AI_GPU_LAYERS");
+    const char *env = g_getenv("NORTHSTAR_AI_GPU_LAYERS");
     gboolean forced = env && *env;
     int want = forced ? atoi(env) : 0;
     if (forced && want == 0)
@@ -1682,7 +1682,7 @@ ns_ai_idle_unload_cb(gpointer ud)
         g_get_monotonic_time() - g_last_use_us > NS_AI_IDLE_UNLOAD_US) {
         ns_ai_unload_locked();
         loaded = FALSE;
-        g_message("nordstjernen-ai: unloaded idle model");
+        g_message("northstar-ai: unloaded idle model");
     }
     if (!loaded)
         g_idle_timer = 0;

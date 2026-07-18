@@ -1,4 +1,4 @@
-/* Nordstjernen — decoded-image texture abstraction.
+/* Northstar — decoded-image texture abstraction.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

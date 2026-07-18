@@ -35,7 +35,7 @@ wpt_hook_h = custom_target(
             'ns_wpt_hook_src'],
 )
 
-nordstjernen_engine_sources = files(
+northstar_engine_sources = files(
   'ai.c',
   'anim.c',
   'bytecode_cache.c',
@@ -91,26 +91,26 @@ nordstjernen_engine_sources = files(
 # GTK-free helpers used by the desktop executable but not the engine UI:
 # the headless render driver and the crash watchdog. Kept in src/ as common
 # code; the GTK frontend itself lives in src/gtk/.
-nordstjernen_app_sources = files(
+northstar_app_sources = files(
   'headless.c',
   'watchdog.c',
 )
 
 if have_avif
-  nordstjernen_engine_sources += files('image_avif.c')
+  northstar_engine_sources += files('image_avif.c')
 endif
 
-nordstjernen_win_resources = []
+northstar_win_resources = []
 if host_machine.system() == 'windows'
   windows = import('windows')
-  nordstjernen_win_resources = windows.compile_resources(
-    'nordstjernen.rc',
-    depend_files: files('../data/icons/nordstjernen.ico'),
+  northstar_win_resources = windows.compile_resources(
+    'northstar.rc',
+    depend_files: files('../data/icons/northstar.ico'),
   )
 endif
 
 if is_mobile
-  nordstjernen_deps = [
+  northstar_deps = [
     glib,
     gobject,
     gio,
@@ -131,7 +131,7 @@ if is_mobile
     zlib,
   ]
 else
-  nordstjernen_deps = [
+  northstar_deps = [
     glib,
     gobject,
     gio,
@@ -155,31 +155,31 @@ else
   ]
 
   if have_seccomp
-    nordstjernen_deps += [libseccomp]
+    northstar_deps += [libseccomp]
   endif
 
   if have_avif
-    nordstjernen_deps += [libavif]
+    northstar_deps += [libavif]
   endif
 
   if have_enchant
-    nordstjernen_deps += [libenchant]
+    northstar_deps += [libenchant]
   endif
 endif
 
 if have_fontconfig
-  nordstjernen_deps += [libfontconfig]
+  northstar_deps += [libfontconfig]
 endif
 
 if have_pangoft2
-  nordstjernen_deps += [libpangoft2]
+  northstar_deps += [libpangoft2]
 endif
 
 if have_freetype
-  nordstjernen_deps += [libfreetype]
+  northstar_deps += [libfreetype]
 endif
 
-nordstjernen_deps += [libpsl]
+northstar_deps += [libpsl]
 
 sdl2_dep = dependency('sdl2', required: get_option('audio'))
 ns_lib_c_args = []
@@ -191,24 +191,24 @@ endif
 
 if have_ai
   cpp_stdlib_name = host_machine.system() == 'darwin' ? 'c++' : 'stdc++'
-  nordstjernen_deps += ai_deps
-  nordstjernen_deps += [
+  northstar_deps += ai_deps
+  northstar_deps += [
     meson.get_compiler('cpp').find_library(cpp_stdlib_name, required: true),
     cc.find_library('dl', required: false),
     dependency('threads'),
   ]
 endif
 
-nordstjernen_win_subsystem = (
+northstar_win_subsystem = (
   host_machine.system() == 'windows' ? 'windows' : 'console'
 )
 
-nordstjernen_link_args = []
+northstar_link_args = []
 if host_machine.system() == 'windows'
-  nordstjernen_link_args += cc.get_supported_link_arguments(
+  northstar_link_args += cc.get_supported_link_arguments(
     ['-Wl,--stack,8388608'],
   )
-  nordstjernen_link_args += ['-lbcrypt', '-ladvapi32', '-lshell32', '-luser32']
+  northstar_link_args += ['-lbcrypt', '-ladvapi32', '-lshell32', '-luser32']
 endif
 
 # NetBSD pkgsrc gnutls (pulled in transitively) carries an undefined
@@ -217,7 +217,7 @@ endif
 # undefined symbols originating from shared libraries on NetBSD only; our
 # own objects are still checked.
 if host_machine.system() == 'netbsd'
-  nordstjernen_link_args += cc.get_supported_link_arguments(
+  northstar_link_args += cc.get_supported_link_arguments(
     ['-Wl,--allow-shlib-undefined'],
   )
 endif
@@ -230,15 +230,15 @@ endif
 # the executables' own symbols (it overrides --export-dynamic regardless of
 # link order); the only runtime dlsym we need (RAND_bytes for RNG warmup)
 # resolves through a dependency library, whose exports this leaves untouched.
-# Applies to the executables only; the shared libnordstjernen keeps its API.
-nordstjernen_exe_link_args = nordstjernen_link_args + \
+# Applies to the executables only; the shared libnorthstar keeps its API.
+northstar_exe_link_args = northstar_link_args + \
   cc.get_supported_link_arguments(
     ['-Wl,--version-script=' + meson.current_source_dir() / 'exe-local.map'])
 
 if host_machine.system() == 'windows'
   executable(
-    'nordstjernen-launcher',
-    files('win_launcher.c') + nordstjernen_win_resources,
+    'northstar-launcher',
+    files('win_launcher.c') + northstar_win_resources,
     win_subsystem: 'windows',
     link_args: ['-luser32', '-lshell32'],
   )
@@ -296,7 +296,7 @@ if not is_mobile
     endif
 
     executable(
-      'nordstjernen-audio',
+      'northstar-audio',
       files('audio/main.c') + audio_sandbox_sources,
       include_directories: include_directories('audio', '.'),
       link_with: libminimp3,
@@ -305,7 +305,7 @@ if not is_mobile
       install: true,
     )
   else
-    message('SDL2 not found — audio playback helper (nordstjernen-audio) disabled')
+    message('SDL2 not found — audio playback helper (northstar-audio) disabled')
   endif
 
 endif

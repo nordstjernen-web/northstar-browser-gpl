@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nordstjernen nightly build orchestrator. Builds, from a single Linux host,
+# Northstar nightly build orchestrator. Builds, from a single Linux host,
 # a source tarball, per-distro Linux packages (debian/ubuntu/opensuse/alpine
 # via containers, in parallel), and Windows, macOS and BSD (FreeBSD/NetBSD)
 # builds (by driving the GitHub Actions runners, dispatched up front so
@@ -133,7 +133,7 @@ mkdir -p "$OUTDIR" "$STATUSDIR"
 rm -rf "$OUTDIR/source" "$OUTDIR/linux" "$OUTDIR/windows" "$OUTDIR/macos" "$OUTDIR/java" \
        "$OUTDIR/freebsd" "$OUTDIR/netbsd"
 rm -f "$OUTDIR"/SHA256SUMS "$OUTDIR"/MANIFEST.txt "$OUTDIR"/nightly.log \
-      "$OUTDIR"/nordstjernen-*
+      "$OUTDIR"/northstar-*
 LOG="$OUTDIR/nightly.log"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -177,12 +177,12 @@ retry() {
 
 docker_pull() { retry "$NIGHTLY_DOCKER_PULL_RETRIES" "$DOCKER" pull "$1"; }
 
-log "Nordstjernen nightly $DATE"
+log "Northstar nightly $DATE"
 printf 'ref=%s commit=%s version=%s\nroot=%s\n' \
     "$NIGHTLY_REF" "$COMMIT" "$NVERSION" "$OUTDIR"
 
 archive_to() {
-    git archive --format=tar --prefix="nordstjernen-${NVERSION}/" "$NIGHTLY_REF" \
+    git archive --format=tar --prefix="northstar-${NVERSION}/" "$NIGHTLY_REF" \
         | tar -x -C "$1"
 }
 
@@ -190,7 +190,7 @@ stage_tarball() {
     log "Stage: source tarball"
     local dst="$OUTDIR/source"
     mkdir -p "$dst"
-    local base="nordstjernen-${NVERSION}"
+    local base="northstar-${NVERSION}"
     if git archive --format=tar --prefix="${base}/" "$NIGHTLY_REF" \
            | gzip -9 > "$dst/${base}.tar.gz" \
        && git archive --format=tar --prefix="${base}/" "$NIGHTLY_REF" \
@@ -211,7 +211,7 @@ stage_distro() {
     local src="$WORK/$distro"
     mkdir -p "$src"
     archive_to "$src"
-    local tree="$src/nordstjernen-${NVERSION}"
+    local tree="$src/northstar-${NVERSION}"
     local dst="$OUTDIR/linux/$distro"
     mkdir -p "$dst"
     local -a dargs=( --rm -v "$tree:/build:z" -w /build
@@ -409,7 +409,7 @@ stage_java() {
     mkdir -p "$work/classes" "$work/stage" "$work/doc"
 
     {
-        printf 'Nordstjernen Java API build — %s\n' "$NVERSION"
+        printf 'Northstar Java API build — %s\n' "$NVERSION"
         printf 'JAVA_HOME=%s\nCC=%s\nengine build dir=%s\n' \
             "$jhome" "${CC:-cc}" "$WORK/java-engine"
         "$jhome/bin/javac" -version 2>&1 || true
@@ -423,7 +423,7 @@ stage_java() {
         local jsrc="$WORK/javanative"
         mkdir -p "$jsrc"
         archive_to "$jsrc"
-        local jtree="$jsrc/nordstjernen-${NVERSION}"
+        local jtree="$jsrc/northstar-${NVERSION}"
         if ! $DOCKER image inspect "$NIGHTLY_DEBIAN_IMAGE" >/dev/null 2>&1; then
             docker_pull "$NIGHTLY_DEBIAN_IMAGE" >> "$blog" 2>&1 || true
         fi
@@ -462,10 +462,10 @@ stage_java() {
     if [ -d "$ROOT/java/src/main/resources/org" ]; then
         cp -r "$ROOT/java/src/main/resources/org" "$work/stage/"
     fi
-    printf 'Automatic-Module-Name: org.nordstjernen\nEnable-Native-Access: ALL-UNNAMED\nMain-Class: org.nordstjernen.app.Browser\nImplementation-Title: Nordstjernen\nImplementation-Version: %s\n' \
+    printf 'Automatic-Module-Name: org.northstar\nEnable-Native-Access: ALL-UNNAMED\nMain-Class: org.northstar.app.Browser\nImplementation-Title: Northstar\nImplementation-Version: %s\n' \
         "$MESON_VERSION" > "$work/mf.txt"
 
-    local base="nordstjernen-java-${NVERSION}"
+    local base="northstar-java-${NVERSION}"
     log "Java: fat jar (library API + browser app + icons + native libs)"
     if ! "$jhome/bin/jar" --create --file "$dst/${base}.jar" \
              --manifest "$work/mf.txt" -C "$work/stage" . >> "$blog" 2>&1 \
@@ -478,7 +478,7 @@ stage_java() {
 
     log "Java: javadoc"
     if "$jhome/bin/javadoc" -quiet -Xdoclint:none -d "$work/doc" \
-            -sourcepath "$ROOT/java/src/main/java" org.nordstjernen >> "$blog" 2>&1; then
+            -sourcepath "$ROOT/java/src/main/java" org.northstar >> "$blog" 2>&1; then
         "$jhome/bin/jar" --create --file "$dst/${base}-javadoc.jar" -C "$work/doc" . >> "$blog" 2>&1 || true
         rm -rf "$dst/apidocs"
         cp -r "$work/doc" "$dst/apidocs"
@@ -488,9 +488,9 @@ stage_java() {
         return
     fi
 
-    ln -sfn "java/${base}.jar"         "$OUTDIR/nordstjernen-java.jar"
-    ln -sfn "java/${base}-sources.jar" "$OUTDIR/nordstjernen-java-sources.jar"
-    ln -sfn "java/${base}-javadoc.jar" "$OUTDIR/nordstjernen-java-javadoc.jar"
+    ln -sfn "java/${base}.jar"         "$OUTDIR/northstar-java.jar"
+    ln -sfn "java/${base}-sources.jar" "$OUTDIR/northstar-java-sources.jar"
+    ln -sfn "java/${base}-javadoc.jar" "$OUTDIR/northstar-java-javadoc.jar"
     ok "$key"
 }
 
@@ -507,21 +507,21 @@ link_stable() {
 
 stage_stable_links() {
     log "Stable download links (/nightly/)"
-    link_stable nordstjernen-windows-x86_64.zip  'windows/*/*-windows-x86_64.zip'
-    link_stable nordstjernen-windows-x86_64.msix 'windows/*/*.msix'
-    link_stable nordstjernen-windows-x86_64.exe  'windows/*/nordstjernen.exe'
-    link_stable nordstjernen-macos.dmg           'macos/*/*.dmg'
-    link_stable nordstjernen-macos-arm64         'macos/*/nordstjernen'
-    link_stable nordstjernen-debian-amd64.deb    'linux/debian/*.deb'
-    link_stable nordstjernen-ubuntu-amd64.deb    'linux/ubuntu/*.deb'
-    link_stable nordstjernen-opensuse-x86_64.rpm 'linux/opensuse/*.rpm'
-    link_stable nordstjernen-linux-x86_64.zip    'linux/ubuntu/*-linux-x86_64.zip'
-    link_stable nordstjernen-alpine-x86_64.zip   'linux/alpine/*-linux-x86_64.zip'
-    link_stable nordstjernen-alpine-x86_64.apk   'linux/alpine/*.apk'
-    link_stable nordstjernen-freebsd-x86_64.zip  'freebsd/*/*-freebsd-x86_64.zip'
-    link_stable nordstjernen-netbsd-x86_64.zip   'netbsd/*/*-netbsd-x86_64.zip'
-    link_stable nordstjernen-src.tar.xz          'source/*.tar.xz'
-    link_stable nordstjernen-src.tar.gz          'source/*.tar.gz'
+    link_stable northstar-windows-x86_64.zip  'windows/*/*-windows-x86_64.zip'
+    link_stable northstar-windows-x86_64.msix 'windows/*/*.msix'
+    link_stable northstar-windows-x86_64.exe  'windows/*/northstar.exe'
+    link_stable northstar-macos.dmg           'macos/*/*.dmg'
+    link_stable northstar-macos-arm64         'macos/*/northstar'
+    link_stable northstar-debian-amd64.deb    'linux/debian/*.deb'
+    link_stable northstar-ubuntu-amd64.deb    'linux/ubuntu/*.deb'
+    link_stable northstar-opensuse-x86_64.rpm 'linux/opensuse/*.rpm'
+    link_stable northstar-linux-x86_64.zip    'linux/ubuntu/*-linux-x86_64.zip'
+    link_stable northstar-alpine-x86_64.zip   'linux/alpine/*-linux-x86_64.zip'
+    link_stable northstar-alpine-x86_64.apk   'linux/alpine/*.apk'
+    link_stable northstar-freebsd-x86_64.zip  'freebsd/*/*-freebsd-x86_64.zip'
+    link_stable northstar-netbsd-x86_64.zip   'netbsd/*/*-netbsd-x86_64.zip'
+    link_stable northstar-src.tar.xz          'source/*.tar.xz'
+    link_stable northstar-src.tar.gz          'source/*.tar.gz'
 }
 
 # Dispatch the remote (Windows/macOS) builds first so they run on GitHub's
@@ -573,7 +573,7 @@ status_keys()  { ls -1 "$STATUSDIR" 2>/dev/null | sort; }
 
 log "Manifest"
 {
-    echo "Nordstjernen nightly build"
+    echo "Northstar nightly build"
     echo "date:    $DATE"
     echo "ref:     $NIGHTLY_REF"
     echo "commit:  $COMMIT"

@@ -1,4 +1,4 @@
-/* Nordstjernen — Cairo paint API.
+/* Northstar — Cairo paint API.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

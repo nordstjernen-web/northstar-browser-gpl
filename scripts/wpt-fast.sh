@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nordstjernen wpt-fast runner.
+# Northstar wpt-fast runner.
 #
 # Drives the wpt-fast checkout (https://github.com/nordstjernen-web/wpt-fast)
 # through the browser's headless --wpt mode in parallel, writes a
@@ -21,7 +21,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BIN=${NS_BIN:-$ROOT/builddir/src/gtk/nordstjernen}
+BIN=${NS_BIN:-$ROOT/builddir/src/gtk/northstar}
 export NS_ALLOW_ROOT=${NS_ALLOW_ROOT:-1}
 FAST_ROOT=${NS_WPT_FAST_ROOT:-$HOME/wpt-fast}
 PORT=8100

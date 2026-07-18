@@ -1,10 +1,10 @@
-/* Nordstjernen — GTK tabbed browser window over the out-of-process renderer.
+/* Northstar — GTK tabbed browser window over the out-of-process renderer.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef NORDSTJERNEN_GTK_PROCWINDOW_H
-#define NORDSTJERNEN_GTK_PROCWINDOW_H
+#ifndef NORTHSTAR_GTK_PROCWINDOW_H
+#define NORTHSTAR_GTK_PROCWINDOW_H
 
 #include <gtk/gtk.h>
 

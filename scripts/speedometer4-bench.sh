@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Speedometer 4.0-alpha (WebKit/Speedometer main) per-workload driver for
-# Nordstjernen, adapted from scripts/speedometer-bench.sh for the v4 module
+# Northstar, adapted from scripts/speedometer-bench.sh for the v4 module
 # layout (default-tests.mjs / shared/translations.mjs / freezeSuites).
 set -euo pipefail
 export LC_NUMERIC=C
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BIN=${NS_BIN:-$ROOT/builddir/src/gtk/nordstjernen}
+BIN=${NS_BIN:-$ROOT/builddir/src/gtk/northstar}
 export NS_ALLOW_ROOT=${NS_ALLOW_ROOT:-1}
 WORK=${NS_SPEEDOMETER_DIR:-${TMPDIR:-/tmp}/nd-spdm-main}
 PORT=${NS_PORT:-8133}

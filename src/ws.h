@@ -1,4 +1,4 @@
-/* Nordstjernen — minimal WebSocket client (libcurl-backed).
+/* Northstar — minimal WebSocket client (libcurl-backed).
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

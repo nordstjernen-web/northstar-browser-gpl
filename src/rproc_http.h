@@ -1,4 +1,4 @@
-/* Nordstjernen — HTTP renderer IPC client (experiment; mirrors rproc.h).
+/* Northstar — HTTP renderer IPC client (experiment; mirrors rproc.h).
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

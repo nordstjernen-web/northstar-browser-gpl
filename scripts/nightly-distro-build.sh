@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and package Nordstjernen inside a distro container. Invoked by
+# Build and package Northstar inside a distro container. Invoked by
 # nightly.sh via `docker run` with the source tree at the current
 # directory; installs that distro's deps, builds a release binary, and
 # emits a portable tarball plus a native package (.deb or .rpm) under

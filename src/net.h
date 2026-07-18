@@ -1,4 +1,4 @@
-/* Nordstjernen — libcurl-backed async fetcher API.
+/* Northstar — libcurl-backed async fetcher API.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -25,7 +25,7 @@ G_BEGIN_DECLS
 #  define NS_UA_HINT_MOBILE      1
 #  define NS_SEC_CH_UA_MOBILE    "?1"
 #  define NS_USER_AGENT \
-       "Mozilla/5.0 (Linux; Android 14; K) Nordstjernen/1.0 " \
+       "Mozilla/5.0 (Linux; Android 14; K) Northstar/1.0 " \
        "Chrome/" NS_CHROME_VERSION " AppleWebKit/537.36 Mobile Safari/537.36"
 #else
 #  if defined(_WIN32)
@@ -44,7 +44,7 @@ G_BEGIN_DECLS
 #  define NS_UA_HINT_MOBILE      0
 #  define NS_SEC_CH_UA_MOBILE    "?0"
 #  define NS_USER_AGENT \
-       "Mozilla/5.0 (" NS_UA_PLATFORM_TOKEN ") Nordstjernen/1.0 " \
+       "Mozilla/5.0 (" NS_UA_PLATFORM_TOKEN ") Northstar/1.0 " \
        "Chrome/" NS_CHROME_VERSION " AppleWebKit/537.36 Safari/537.36"
 #  define NS_UA_LADYBIRD \
        "Mozilla/5.0 (" NS_UA_PLATFORM_TOKEN ") Ladybird/1.0 " \

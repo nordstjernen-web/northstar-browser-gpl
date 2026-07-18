@@ -1,4 +1,4 @@
-/* Nordstjernen — @font-face web font loader.
+/* Northstar — @font-face web font loader.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -74,7 +74,7 @@ ns_font_init(void)
     char *base = xdg && *xdg
         ? g_strdup(xdg)
         : g_build_filename(g_get_home_dir(), ".cache", NULL);
-    g_cache_dir = g_build_filename(base, "nordstjernen", "webfonts", NULL);
+    g_cache_dir = g_build_filename(base, "northstar", "webfonts", NULL);
     g_free(base);
     g_mkdir_with_parents(g_cache_dir, 0700);
     ns_paint_register_font_oracle();

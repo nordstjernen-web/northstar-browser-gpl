@@ -9,8 +9,8 @@
       "Bash(meson:*)",
       "Bash(ninja:*)",
       "Bash(./scripts/dev.sh:*)",
-      "Bash(./builddir/src/nordstjernen:*)",
-      "Bash(./builddir-asan/src/nordstjernen:*)",
+      "Bash(./builddir/src/northstar:*)",
+      "Bash(./builddir-asan/src/northstar:*)",
       "Bash(NS_NO_SANDBOX=1:*)",
       "Bash(ASAN_OPTIONS=*)",
       "Bash(DISPLAY=:0:*)",
@@ -37,7 +37,7 @@
       "Bash(pgrep:*)",
       "Bash(pkill:*)",
       "Bash(kill:*)",
-      "Bash(rm -rf ~/.cache/nordstjernen/*)",
+      "Bash(rm -rf ~/.cache/northstar/*)",
       "Bash(rm -f /tmp/*)",
       "Bash(rm -rf /tmp/*)",
       "Bash(mkdir:*)",
@@ -47,7 +47,7 @@
       "Bash(timeout:*)",
       "Bash(command -v:*)",
       "Read(//tmp/**)",
-      "Read(//home/andreas/.cache/nordstjernen/**)"
+      "Read(//home/andreas/.cache/northstar/**)"
     ]
   }
 }

@@ -1,4 +1,4 @@
-/* Nordstjernen — WebSocket client over libcurl's native WebSocket API.
+/* Northstar — WebSocket client over libcurl's native WebSocket API.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

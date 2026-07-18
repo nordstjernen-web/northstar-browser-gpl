@@ -1,22 +1,18 @@
 #
-# spec file for package nordstjernen
+# spec file for package northstar
 #
 # Copyright 2026 Andreas Røsdal
 #
-# The Nordstjernen Source License v1.0 (NSL-1.0) is source-available but
-# NOT an OSI-approved / free license: it forbids "Competing Use" and limits
-# some purposes to non-commercial use. It is therefore tagged SUSE-NonFree
-# and this package belongs in a non-free repository (a home: project or
-# openSUSE's non-free area), never in openSUSE:Factory. NSL-1.0 converts to
-# the MIT license ten years after each release.
+# Northstar is free software under the GNU General Public License,
+# version 3 or later (GPL-3.0-or-later).
 #
 
 
-Name:           nordstjernen
+Name:           northstar
 Version:        1.0.17
 Release:        0
 Summary:        Small, hand-written GTK web browser
-License:        SUSE-NonFree
+License:        GPL-3.0-or-later
 Group:          Productivity/Networking/Web/Browsers
 URL:            https://nordstjernen.org
 
@@ -44,7 +40,7 @@ Recommends:     mpv
 Recommends:     myspell-en_US
 
 %description
-Nordstjernen is a clean-room web browser written from scratch in C, with a
+Northstar is a clean-room web browser written from scratch in C, with a
 GTK 4 user interface and a libcurl network stack. It is built to be small,
 secure, and readable by a single person end to end.
 
@@ -86,22 +82,22 @@ test -f meson.build
 # library and its development header are only needed by external embedders,
 # not the browser app. Drop them so the package is a clean application,
 # not a -devel library.
-rm -f %{buildroot}%{_libdir}/libnordstjernen.so
-rm -f %{buildroot}%{_includedir}/nordstjernen/libnordstjernen.h
-rmdir %{buildroot}%{_includedir}/nordstjernen 2>/dev/null || :
+rm -f %{buildroot}%{_libdir}/libnorthstar.so
+rm -f %{buildroot}%{_includedir}/northstar/libnorthstar.h
+rmdir %{buildroot}%{_includedir}/northstar 2>/dev/null || :
 
-%suse_update_desktop_file org.nordstjernen.WebBrowser
+%suse_update_desktop_file org.northstar.WebBrowser
 
 %files
 %doc README.md
-%license %{_datadir}/nordstjernen/LICENSE
-%{_bindir}/nordstjernen
-%{_bindir}/nordstjernen-renderer
-%{_bindir}/nordstjernen-audio
-%{_datadir}/applications/org.nordstjernen.WebBrowser.desktop
-%{_datadir}/metainfo/org.nordstjernen.WebBrowser.metainfo.xml
-%{_datadir}/nordstjernen/
-%{_datadir}/icons/hicolor/scalable/apps/nordstjernen.gif
-%{_datadir}/icons/hicolor/scalable/apps/nordstjernen*.svg
+%license %{_datadir}/northstar/LICENSE
+%{_bindir}/northstar
+%{_bindir}/northstar-renderer
+%{_bindir}/northstar-audio
+%{_datadir}/applications/org.northstar.WebBrowser.desktop
+%{_datadir}/metainfo/org.northstar.WebBrowser.metainfo.xml
+%{_datadir}/northstar/
+%{_datadir}/icons/hicolor/scalable/apps/northstar.gif
+%{_datadir}/icons/hicolor/scalable/apps/northstar*.svg
 
 %changelog

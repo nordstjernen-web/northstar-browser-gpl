@@ -1,4 +1,4 @@
-/* Nordstjernen — SQLite-backed browsing history API.
+/* Northstar — SQLite-backed browsing history API.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -8,7 +8,7 @@
 
 #include <glib.h>
 
-#include "libnordstjernen.h"
+#include "libnorthstar.h"
 
 G_BEGIN_DECLS
 

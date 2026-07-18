@@ -1,4 +1,4 @@
-/* Nordstjernen — webcam capture (V4L2) and per-site camera permission.
+/* Northstar — webcam capture (V4L2) and per-site camera permission.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

@@ -1,4 +1,4 @@
-/* Nordstjernen — narrow accessors into WAMR internals for the WebAssembly JS API. */
+/* Northstar — narrow accessors into WAMR internals for the WebAssembly JS API. */
 
 #ifndef NS_WAMR_H
 #define NS_WAMR_H

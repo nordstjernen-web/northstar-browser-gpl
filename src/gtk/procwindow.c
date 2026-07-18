@@ -1,4 +1,4 @@
-/* Nordstjernen — GTK tabbed process-per-tab browser shell (IPC renderer).
+/* Northstar — GTK tabbed process-per-tab browser shell (IPC renderer).
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -26,7 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NS_PROC_APP_ID "org.nordstjernen.WebBrowser"
+#define NS_PROC_APP_ID "org.northstar.WebBrowser"
 
 static int g_initial_win_w;
 static int g_initial_win_h;
@@ -68,7 +68,7 @@ ns_brand_versioned(void)
     static char brand[128];
     if (!brand[0])
         g_snprintf(brand, sizeof brand, "%s %s",
-                   ns_i18n("Nordstjernen"), NS_VERSION);
+                   ns_i18n("Northstar"), NS_VERSION);
     return brand;
 }
 
@@ -95,7 +95,7 @@ install_icon_search_paths(void)
     GtkIconTheme *theme = gtk_icon_theme_get_for_display(display);
     if (!theme)
         return;
-    gtk_icon_theme_add_resource_path(theme, "/org/nordstjernen/WebBrowser/icons");
+    gtk_icon_theme_add_resource_path(theme, "/org/northstar/WebBrowser/icons");
     const char *exe = ns_app_self_exe();
     if (!exe)
         return;
@@ -1242,7 +1242,7 @@ task_mgr_refresh(NsTaskMgr *tm)
         char wstate[32] = "";
         long wrss = -1;
         ns_rproc_http_proc_info(wpid, wstate, sizeof wstate, &wrss);
-        char *wname = g_strdup_printf("%s (%s)", ns_i18n("Nordstjernen"),
+        char *wname = g_strdup_printf("%s (%s)", ns_i18n("Northstar"),
                                       ns_i18n("watchdog"));
         task_mgr_add_row(tm, "applications-system-symbolic", wname, wpid,
                          wstate, wrss, NULL);
@@ -1255,7 +1255,7 @@ task_mgr_refresh(NsTaskMgr *tm)
         long grss = -1;
         ns_rproc_http_proc_info(gpid, gstate, sizeof gstate, &grss);
         char *gname = g_strdup_printf("%s (GTK frontend)",
-                                      ns_i18n("Nordstjernen"));
+                                      ns_i18n("Northstar"));
         task_mgr_add_row(tm, "web-browser-symbolic", gname, gpid, gstate,
                          grss, NULL);
         g_free(gname);
@@ -1451,7 +1451,7 @@ act_task_manager(GSimpleAction *action, GVariant *parameter, gpointer user_data)
 
     GtkWidget *win = gtk_window_new();
     char *tm_title = g_strdup_printf("%s — %s", ns_i18n("Task Manager"),
-                                     ns_i18n("Nordstjernen"));
+                                     ns_i18n("Northstar"));
     gtk_window_set_title(GTK_WINDOW(win), tm_title);
     g_free(tm_title);
     gtk_window_set_transient_for(GTK_WINDOW(win), GTK_WINDOW(pw->window));
@@ -1654,13 +1654,13 @@ proc_window_new(GtkApplication *app, const char *home_url)
     gtk_widget_set_margin_start(toolbar, 4);
     gtk_widget_set_margin_end(toolbar, 4);
 
-    pw->back = toolbar_button("nordstjernen-back", ns_i18n("Back"),
+    pw->back = toolbar_button("northstar-back", ns_i18n("Back"),
                               G_CALLBACK(on_back_clicked), pw);
-    pw->forward = toolbar_button("nordstjernen-forward", ns_i18n("Forward"),
+    pw->forward = toolbar_button("northstar-forward", ns_i18n("Forward"),
                                  G_CALLBACK(on_forward_clicked), pw);
-    pw->reload = toolbar_button("nordstjernen-reload", ns_i18n("Reload"),
+    pw->reload = toolbar_button("northstar-reload", ns_i18n("Reload"),
                                 G_CALLBACK(on_reload_clicked), pw);
-    GtkWidget *home = toolbar_button("nordstjernen-home", ns_i18n("Home"),
+    GtkWidget *home = toolbar_button("northstar-home", ns_i18n("Home"),
                                      G_CALLBACK(on_home_clicked), pw);
 
     pw->spinner = gtk_spinner_new();
@@ -1686,14 +1686,14 @@ proc_window_new(GtkApplication *app, const char *home_url)
                      G_CALLBACK(on_address_focus_enter), pw);
     gtk_widget_add_controller(pw->address, addr_focus);
 
-    GtkWidget *go = toolbar_button("nordstjernen-go", ns_i18n("Go"),
+    GtkWidget *go = toolbar_button("northstar-go", ns_i18n("Go"),
                                    G_CALLBACK(on_go_clicked), pw);
     pw->bookmarks_button = toolbar_button("user-bookmarks-symbolic",
                                           ns_i18n("Bookmarks"),
                                           G_CALLBACK(on_bookmarks_clicked), pw);
 #if defined(NS_HAVE_AI) && !defined(__APPLE__)
     GtkWidget *ai_window_button =
-        toolbar_button("nordstjernen-ai", ns_i18n("New AI Window"),
+        toolbar_button("northstar-ai", ns_i18n("New AI Window"),
                        G_CALLBACK(on_ai_window_clicked), pw);
 #endif
 
@@ -1708,7 +1708,7 @@ proc_window_new(GtkApplication *app, const char *home_url)
     g_menu_append(appmenu, ns_i18n("Task Manager"), "win.task-manager");
     g_menu_append(appmenu, ns_i18n("Settings"), "win.settings");
     GMenu *appmenu_about = g_menu_new();
-    g_menu_append(appmenu_about, ns_i18n("About Nordstjernen"), "win.about");
+    g_menu_append(appmenu_about, ns_i18n("About Northstar"), "win.about");
     g_menu_append_section(appmenu, NULL, G_MENU_MODEL(appmenu_about));
     g_object_unref(appmenu_about);
     GtkWidget *menu_button = gtk_menu_button_new();
@@ -1720,7 +1720,7 @@ proc_window_new(GtkApplication *app, const char *home_url)
     set_accessible_label(menu_button, ns_i18n("Menu"));
     g_object_unref(appmenu);
 
-    GtkWidget *logo = gtk_image_new_from_icon_name("nordstjernen");
+    GtkWidget *logo = gtk_image_new_from_icon_name("northstar");
     gtk_image_set_pixel_size(GTK_IMAGE(logo), 24);
     GtkWidget *logo_button = gtk_button_new();
     gtk_button_set_child(GTK_BUTTON(logo_button), logo);
@@ -1774,7 +1774,7 @@ act_about(GSimpleAction *action, GVariant *parameter, gpointer user_data)
     ProcWindow *pw = user_data;
     NsProcView *v = current_view(pw);
     if (v)
-        ns_proc_view_load(v, "about:nordstjernen");
+        ns_proc_view_load(v, "about:northstar");
 }
 
 static void
@@ -1946,7 +1946,7 @@ on_proc_activate(GtkApplication *app, gpointer user_data)
 {
     ProcAppCtx *ctx = user_data;
     install_icon_search_paths();
-    gtk_window_set_default_icon_name("nordstjernen");
+    gtk_window_set_default_icon_name("northstar");
 #ifdef __APPLE__
     ns_macos_set_dock_icon();
 #endif
@@ -1986,7 +1986,7 @@ on_proc_activate(GtkApplication *app, gpointer user_data)
 static void
 procapp_clear_cache_dir(const char *name, gint64 min_age_s)
 {
-    char *dir = g_build_filename(g_get_user_cache_dir(), "nordstjernen",
+    char *dir = g_build_filename(g_get_user_cache_dir(), "northstar",
                                  name, NULL);
     gint64 cutoff = g_get_real_time() / G_USEC_PER_SEC - min_age_s;
     GQueue *stack = g_queue_new();

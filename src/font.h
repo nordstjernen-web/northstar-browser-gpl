@@ -1,4 +1,4 @@
-/* Nordstjernen — @font-face web font loader.
+/* Northstar — @font-face web font loader.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

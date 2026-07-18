@@ -1,4 +1,4 @@
-/* Nordstjernen — GTK thin client over the out-of-process renderer (rproc).
+/* Northstar — GTK thin client over the out-of-process renderer (rproc).
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -551,9 +551,9 @@ static char *
 ns_proc_audio_helper_path(void)
 {
 #ifdef G_OS_WIN32
-    const char *name = "nordstjernen-audio.exe";
+    const char *name = "northstar-audio.exe";
 #else
-    const char *name = "nordstjernen-audio";
+    const char *name = "northstar-audio";
 #endif
     const char *exe = ns_app_self_exe();
     if (exe) {
@@ -632,7 +632,7 @@ pv_audio_pump(NsProcView *v, const char *commands)
         v->audio_proc = g_subprocess_launcher_spawn(launcher, &err, path, NULL);
         g_object_unref(launcher);
         if (!v->audio_proc) {
-            g_printerr("nordstjernen: audio helper %s failed to start: %s\n",
+            g_printerr("northstar: audio helper %s failed to start: %s\n",
                        path, err ? err->message : "unknown error");
             g_free(path);
             g_clear_error(&err);
@@ -724,7 +724,7 @@ static void
 pv_append_media_process_stats(NsProcView *v, GString *out)
 {
     struct { const char *label; int pid; } procs[] = {
-        { "audio helper (nordstjernen-audio)", ns_proc_view_audio_pid(v) },
+        { "audio helper (northstar-audio)", ns_proc_view_audio_pid(v) },
     };
     gboolean any = FALSE;
     for (gsize i = 0; i < G_N_ELEMENTS(procs); i++) {
@@ -2279,7 +2279,7 @@ on_save_dialog_done(GObject *src, GAsyncResult *res, gpointer ud)
         if (dest && v->opened) {
             static int export_counter = 0;
             char *base = g_strdup_printf(
-                "nordstjernen-export-%" G_GINT64_FORMAT "-%d.%s",
+                "northstar-export-%" G_GINT64_FORMAT "-%d.%s",
                 g_get_monotonic_time(), ++export_counter,
                 c->pdf ? "pdf" : "png");
             Req *req = g_new0(Req, 1);

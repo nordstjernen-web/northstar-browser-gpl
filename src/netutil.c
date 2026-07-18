@@ -1,4 +1,4 @@
-/* Nordstjernen — curl-free network helpers shared by the engine and the
+/* Northstar — curl-free network helpers shared by the engine and the
  * thin browser shells: Accept-Language, search-URL building, proxy masking.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later

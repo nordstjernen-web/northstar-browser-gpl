@@ -1,4 +1,4 @@
-/* Nordstjernen — on-disk HTTP cache API.
+/* Northstar — on-disk HTTP cache API.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

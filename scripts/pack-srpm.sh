@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a source RPM (.src.rpm) of Nordstjernen. The SRPM contains a
+# Build a source RPM (.src.rpm) of Northstar. The SRPM contains a
 # clean source tarball plus the meson wrap packagecache so rpmbuild can
 # resolve the remaining wrap-based subproject (Wuffs) offline when the
 # SRPM is rebuilt with `rpmbuild --rebuild`.
@@ -8,7 +8,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 VERSION=$(grep -E "^[[:space:]]*version" "$ROOT/meson.build" | head -1 \
           | sed -E "s/.*version: '([^']+)'.*/\1/")
-NAME=nordstjernen
+NAME=northstar
 SLUG="${NAME}-${VERSION}"
 
 if ! command -v rpmbuild >/dev/null 2>&1; then
@@ -43,7 +43,7 @@ cat > "$SPEC" <<SPEC_EOF
 Name:           ${NAME}
 Version:        ${VERSION}
 Release:        1%{?dist}
-Summary:        Nordstjernen Web Navigator — a small, hand-written web browser
+Summary:        Northstar Web Navigator — a small, hand-written web browser
 
 License:        Proprietary
 URL:            https://nordstjernen.org
@@ -69,7 +69,7 @@ Requires:       uchardet
 Requires:       librsvg2
 
 %description
-Nordstjernen is a small, source-available web browser written in C with
+Northstar is a small, source-available web browser written in C with
 GTK 4 and libcurl. The HTML parser, CSS engine, layout, paint and
 JavaScript glue are written from scratch — no third-party browser
 engine is used. SVG images are rendered with librsvg.
@@ -94,21 +94,21 @@ install -dm755 %{buildroot}%{_datadir}/icons/hicolor/scalable/apps
 install -dm755 %{buildroot}%{_datadir}/applications
 install -dm755 %{buildroot}%{_docdir}/%{name}
 
-install -m755 builddir/src/gtk/nordstjernen %{buildroot}%{_bindir}/nordstjernen
-install -m755 builddir/src/nordstjernen-renderer %{buildroot}%{_bindir}/nordstjernen-renderer
-install -m644 data/icons/hicolor/scalable/apps/nordstjernen.svg \\
-    %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/nordstjernen.svg
-install -m644 data/nordstjernen.desktop \\
-    %{buildroot}%{_datadir}/applications/org.nordstjernen.WebBrowser.desktop
+install -m755 builddir/src/gtk/northstar %{buildroot}%{_bindir}/northstar
+install -m755 builddir/src/northstar-renderer %{buildroot}%{_bindir}/northstar-renderer
+install -m644 data/icons/hicolor/scalable/apps/northstar.svg \\
+    %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/northstar.svg
+install -m644 data/northstar.desktop \\
+    %{buildroot}%{_datadir}/applications/org.northstar.WebBrowser.desktop
 install -m644 README.md %{buildroot}%{_docdir}/%{name}/
 install -m644 THIRD-PARTY-LICENSES.md %{buildroot}%{_docdir}/%{name}/
 install -m644 LICENSE %{buildroot}%{_docdir}/%{name}/
 
 %files
-%{_bindir}/nordstjernen
-%{_bindir}/nordstjernen-renderer
-%{_datadir}/icons/hicolor/scalable/apps/nordstjernen.svg
-%{_datadir}/applications/org.nordstjernen.WebBrowser.desktop
+%{_bindir}/northstar
+%{_bindir}/northstar-renderer
+%{_datadir}/icons/hicolor/scalable/apps/northstar.svg
+%{_datadir}/applications/org.northstar.WebBrowser.desktop
 %doc %{_docdir}/%{name}/README.md
 %doc %{_docdir}/%{name}/THIRD-PARTY-LICENSES.md
 %license %{_docdir}/%{name}/LICENSE
@@ -131,7 +131,7 @@ fi
 
 %changelog
 * $(LC_ALL=C date "+%a %b %d %Y") Andreas Røsdal <andreas.rosdal@gmail.com> - ${VERSION}-1
-- Source RPM release of Nordstjernen ${VERSION}.
+- Source RPM release of Northstar ${VERSION}.
 SPEC_EOF
 
 rpmbuild --define "_topdir $RPMTOP" -bs "$SPEC"

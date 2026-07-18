@@ -1,4 +1,4 @@
-/* Nordstjernen — DOM data structure API.
+/* Northstar — DOM data structure API.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

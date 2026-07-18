@@ -1,4 +1,4 @@
-/* Nordstjernen — renderer request handling shared by the out-of-process
+/* Northstar — renderer request handling shared by the out-of-process
    renderer executable and the in-process single-process-mode host.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later

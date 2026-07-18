@@ -1,10 +1,10 @@
-# Nordstjernen — Codex operating guide
+# Northstar — Codex operating guide
 
-Nordstjernen ("Nordstjernen Web Navigator") is a web
+Northstar ("Northstar Web Navigator") is a web
 browser written from scratch in **C**, using **GTK 4** for the UI and
 **libcurl** for networking. Targets Linux, macOS, and Windows.
 
-See `README.md` for the product vision. Nordstjernen is a fresh
+See `README.md` for the product vision. Northstar is a fresh
 implementation — there is no upstream browser engine, no fork,
 nothing imported.
 
@@ -27,10 +27,10 @@ nothing imported.
 - The one vendored, in-tree video codec is MPEG-1, decoded by the
   vendored pl_mpeg decoder (`subprojects/plmpeg/`, wrapped by
   `src/video_decode.c`); such `<video>` plays inline (`src/video.c`).
-  Audio plays via the unsandboxed `nordstjernen-audio` helper
+  Audio plays via the unsandboxed `northstar-audio` helper
   (`src/audio/main.c`), which decodes MPEG-1/MP2 (pl_mpeg) and MP3
   (vendored minimp3, `src/audio/minimp3.h`) and outputs through SDL2.
-  MSE video frames decode in the `nordstjernen-video` helper
+  MSE video frames decode in the `northstar-video` helper
   (`src/videoproc/main.c`, built when libav is present); the shell
   composites its BGRA frames from a shm ring (see `docs/media.md`).
   When FFmpeg's libav\* system packages are present, the build also
@@ -59,7 +59,7 @@ nothing imported.
 - No `TODO`/`FIXME`/`XXX` markers — file a real task instead.
 - Bundled external projects are exempt from this comments policy.
   In particular, do not reformat or strip comments from `src/lexbor/`,
-  `src/quickjs/`, or `subprojects/` just to satisfy Nordstjernen style.
+  `src/quickjs/`, or `subprojects/` just to satisfy Northstar style.
 
 ## Autonomous mode — read this every session
 
@@ -87,7 +87,7 @@ This repo is driven by Codex in long uninterrupted sessions.
   driven from either a Linux box (GTK 4 / libcurl / meson / clang +
   an X session at `DISPLAY=:0`) or a Windows 11 box via MSYS2
   MINGW64 (same toolchain, same meson/ninja invocation; the binary
-  is `./builddir/src/gtk/nordstjernen.exe`). Every commit must pass
+  is `./builddir/src/gtk/northstar.exe`). Every commit must pass
   `meson compile -C builddir` locally before pushing. Smoke-launch
   the browser (in the background, then kill it) on material changes
   — that's the per-change correctness gate, not CI. See
@@ -106,7 +106,7 @@ The intended build system is **meson + ninja**. From a clean checkout:
 ```sh
 meson setup builddir
 meson compile -C builddir
-./builddir/src/gtk/nordstjernen
+./builddir/src/gtk/northstar
 ```
 
 The QuickJS engine is integrated into the main tree at `src/quickjs/`
@@ -256,7 +256,7 @@ don't add `meson test` targets.
 ## Don't
 
 - Don't introduce Mozilla/Gecko code, WebKit code, or any other
-  upstream browser engine source. Nordstjernen is an independent
+  upstream browser engine source. Northstar is an independent
   implementation, not a fork.
 - Don't add AI-style web-API surface area, even as stubs. (WebGL
   already exists as a deliberate, opt-in exception — extend

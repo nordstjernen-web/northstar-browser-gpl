@@ -1,4 +1,4 @@
-/* Nordstjernen — memory-safe PNG/GIF/BMP/JPEG decode via Wuffs.
+/* Northstar — memory-safe PNG/GIF/BMP/JPEG decode via Wuffs.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

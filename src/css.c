@@ -1,4 +1,4 @@
-/* Nordstjernen — CSS parser, selectors, cascade.
+/* Northstar — CSS parser, selectors, cascade.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

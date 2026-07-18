@@ -1,4 +1,4 @@
-/* Nordstjernen — CSS transitions and @keyframes animation engine.
+/* Northstar — CSS transitions and @keyframes animation engine.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

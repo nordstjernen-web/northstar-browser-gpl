@@ -1,4 +1,4 @@
-/* Nordstjernen — local on-CPU language model chat backend (llama.cpp).
+/* Northstar — local on-CPU language model chat backend (llama.cpp).
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

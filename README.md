@@ -1,7 +1,7 @@
-Nordstjernen web browser (open source GPL edition)
+Northstar web browser (open source GPL edition)
 ==================================================
 
-Nordstjernen is a minimalist web browser, written from scratch in C,
+Northstar is a minimalist web browser, written from scratch in C,
 focused on supporting the HTML and CSS standards. This is a pared-down
 desktop build that targets **Linux** (and Windows), with a deliberately
 small feature set.
@@ -18,16 +18,16 @@ end-to-end.
 
 ## What this edition is
 
-This edition strips Nordstjernen down to a single-window, single-page,
+This edition strips Northstar down to a single-window, single-page,
 single-process desktop browser. Compared with the full
-[Nordstjernen project](https://github.com/nordstjernen-web/nordstjernen)
+[Northstar project](https://github.com/nordstjernen-web/nordstjernen)
 it **removes**: tabs and the process-per-tab architecture (the engine now
 always runs in the shell process), WebGL and WebGPU, inline video and
 the video helper process, the inline PDF viewer, WebP image decoding,
 and the Android, Java, macOS and iOS builds and the embeddable-library
 API.
 
-Audio still plays (MP3, MP2, Ogg Opus/Vorbis via the `nordstjernen-audio`
+Audio still plays (MP3, MP2, Ogg Opus/Vorbis via the `northstar-audio`
 helper), images still decode (PNG/GIF/BMP/JPEG via Wuffs, plus AVIF and
 SVG), and the JavaScript, CSS, networking, WebAssembly and WebCrypto
 engines are unchanged.
@@ -48,7 +48,7 @@ engines are unchanged.
   is checked against a local SHA-256 blocklist. The check runs entirely
   on-device.
 - **Media** — images (PNG, GIF, BMP, JPEG, AVIF, SVG); audio (`<audio>`)
-  plays through the `nordstjernen-audio` helper. `<video>` lays out but
+  plays through the `northstar-audio` helper. `<video>` lays out but
   does not decode in this edition.
 - **MathML** — a minimalist presentation-MathML renderer.
 - **Spell checking** — optional, via the Enchant library.
@@ -69,7 +69,7 @@ sudo apt install build-essential pkg-config meson ninja-build \
     libgtk-4-dev libcurl4-openssl-dev libssl-dev libuchardet-dev librsvg2-dev \
     libpsl-dev libsqlite3-dev libseccomp-dev libavif-dev libsdl2-dev
 meson setup builddir && meson compile -C builddir
-./builddir/src/gtk/nordstjernen
+./builddir/src/gtk/northstar
 ```
 
 WAMR, Wuffs, pl_mpeg and minimp3 are vendored in-tree. lexbor and
@@ -79,7 +79,7 @@ fetched by `meson setup` as pinned upstream subprojects (see
 
 ## Dependencies
 
-Nordstjernen is an independent engine — no upstream browser code.
+Northstar is an independent engine — no upstream browser code.
 
 **Fetched at `meson setup`** (pinned upstream meson subprojects, `subprojects/*.wrap`):
 
@@ -106,7 +106,7 @@ audio helper), Enchant (spell-checking), fontconfig / pangoft2.
 
 ## License
 
-Nordstjernen is free software, licensed under the **GNU General Public
+Northstar is free software, licensed under the **GNU General Public
 License, version 3 or later** — see [LICENSE](LICENSE).
 
 Project home: <https://nordstjernen.org> · Copyright 2026 Andreas Røsdal.

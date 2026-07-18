@@ -1,4 +1,4 @@
-/* Nordstjernen — application entry point: process bootstrap, headless render
+/* Northstar — application entry point: process bootstrap, headless render
  * driver dispatch, and the out-of-process (IPC) GTK browser shell.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -146,7 +146,7 @@ SetCurrentProcessExplicitAppUserModelID(PCWSTR AppID);
 static void
 ns_win32_set_app_id(void)
 {
-    (void)SetCurrentProcessExplicitAppUserModelID(L"Nordstjernen.Browser");
+    (void)SetCurrentProcessExplicitAppUserModelID(L"Northstar.Browser");
 }
 
 static void
@@ -347,7 +347,7 @@ ns_apply_gsk_renderer(const char *pref)
 }
 
 /* The GTK GUI runs the process-per-tab IPC renderer (a thin shell spawning
- * sandboxed nordstjernen-renderer processes). Headless / dump / eval / inspect
+ * sandboxed northstar-renderer processes). Headless / dump / eval / inspect
  * modes run the in-process engine without a display. */
 static gboolean
 ns_proc_mode_wanted(int argc, char **argv)
@@ -472,7 +472,7 @@ main(int argc, char **argv)
     init_self_exe(argc > 0 ? argv[0] : NULL);
     ns_i18n_init(g_self_exe);
     ns_config_init();
-    ns_thread_dump_install_signal("nordstjernen");
+    ns_thread_dump_install_signal("northstar");
 
     gboolean proc_mode = ns_proc_mode_wanted(argc, argv);
 

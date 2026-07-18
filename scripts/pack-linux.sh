@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build a redistributable Nordstjernen Linux x86_64 release: the stripped,
-# LTO-optimised nordstjernen binary plus the data files it needs at runtime,
+# Build a redistributable Northstar Linux x86_64 release: the stripped,
+# LTO-optimised northstar binary plus the data files it needs at runtime,
 # zipped under dist/.
 set -euo pipefail
 
@@ -16,7 +16,7 @@ VERSION=${VERSION:-$(awk -F"'" \
 ARCH=$(uname -m)
 FSVERSION=${VERSION//\~/-}
 FSVERSION=${FSVERSION//\//-}
-SLUG="nordstjernen-${FSVERSION}-linux-${ARCH}"
+SLUG="northstar-${FSVERSION}-linux-${ARCH}"
 STAGE="$ROOT/dist/${SLUG}"
 ZIP="$ROOT/dist/${SLUG}.zip"
 
@@ -59,14 +59,14 @@ if [ ! -d "$BUILDDIR" ]; then
         ${WEBGPU_SETUP_ARGS[@]+"${WEBGPU_SETUP_ARGS[@]}"}
 fi
 meson compile -C "$BUILDDIR" ${NS_BUILD_JOBS:+-j "$NS_BUILD_JOBS"}
-strip --strip-all "$BUILDDIR/src/gtk/nordstjernen"
-# The GUI is a thin shell that spawns one sandboxed nordstjernen-renderer
+strip --strip-all "$BUILDDIR/src/gtk/northstar"
+# The GUI is a thin shell that spawns one sandboxed northstar-renderer
 # process per tab; it must ship alongside the main binary.
-strip --strip-all "$BUILDDIR/src/nordstjernen-renderer"
+strip --strip-all "$BUILDDIR/src/northstar-renderer"
 # The audio playback helper (MP2/MP3 decode + SDL2 output). Built only when
 # SDL2 was present at configure time (meson 'audio' feature is auto); ship it
 # beside the main binary so the shell can spawn it for <video>/<audio> sound.
-AUDIO_BIN="$BUILDDIR/src/nordstjernen-audio"
+AUDIO_BIN="$BUILDDIR/src/northstar-audio"
 if [ -f "$AUDIO_BIN" ]; then
     strip --strip-all "$AUDIO_BIN"
 fi
@@ -75,14 +75,14 @@ fi
 # links libavformat directly, so the FFmpeg runtime libraries become a hard
 # requirement documented below.
 WEBM=0
-if ldd "$BUILDDIR/src/nordstjernen-renderer" 2>/dev/null | grep -q 'libavformat'; then
+if ldd "$BUILDDIR/src/northstar-renderer" 2>/dev/null | grep -q 'libavformat'; then
     WEBM=1
     log "WebM: built (libav linked) — FFmpeg runtime libs required at install"
 else
     log "WebM: not built (libav absent at configure time)"
 fi
 
-LOADER=$(ldd "$BUILDDIR/src/gtk/nordstjernen" 2>/dev/null \
+LOADER=$(ldd "$BUILDDIR/src/gtk/northstar" 2>/dev/null \
     | grep -m1 -oE 'ld-(musl|linux)[^ ]*' || true)
 if printf '%s' "$LOADER" | grep -q 'ld-musl'; then
     LIBC=musl
@@ -97,7 +97,7 @@ if [ "$LIBC" = musl ]; then
         libseccomp libpsl sqlite-libs ca-certificates font-dejavu sdl2 # Alpine (musl)'
 else
     # Don't guess the glibc floor — read it from the binary we just built.
-    GLIBC_MIN=$(objdump -T "$BUILDDIR/src/gtk/nordstjernen" 2>/dev/null \
+    GLIBC_MIN=$(objdump -T "$BUILDDIR/src/gtk/northstar" 2>/dev/null \
         | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -t. -k1,1V -k2,2n -u \
         | tail -1 | cut -d_ -f2)
     LIBC_REQ="- glibc ${GLIBC_MIN:-2.38}+ (the build container's generation; check with: ldd --version)"
@@ -111,15 +111,15 @@ fi
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE/data/icons/hicolor/scalable/apps"
-cp "$BUILDDIR/src/gtk/nordstjernen" "$STAGE/"
-cp "$BUILDDIR/src/nordstjernen-renderer" "$STAGE/"
+cp "$BUILDDIR/src/gtk/northstar" "$STAGE/"
+cp "$BUILDDIR/src/northstar-renderer" "$STAGE/"
 if [ -f "$AUDIO_BIN" ]; then
     cp "$AUDIO_BIN" "$STAGE/"
 fi
-cp "$ROOT"/data/icons/hicolor/scalable/apps/nordstjernen*.svg \
-   "$ROOT"/data/icons/hicolor/scalable/apps/nordstjernen.gif \
+cp "$ROOT"/data/icons/hicolor/scalable/apps/northstar*.svg \
+   "$ROOT"/data/icons/hicolor/scalable/apps/northstar.gif \
    "$STAGE/data/icons/hicolor/scalable/apps/"
-cp "$ROOT/data/nordstjernen.desktop" "$STAGE/data/"
+cp "$ROOT/data/northstar.desktop" "$STAGE/data/"
 
 # When WebGPU was built, ship libwgpu_native.so beside the binaries and point
 # their rpath at $ORIGIN so the renderer (and the GTK shell, which links
@@ -135,7 +135,7 @@ if [ -n "$WGPU_ROOT" ] && [ -e "$WGPU_ROOT/lib/libwgpu_native.so" ]; then
         # alone would be ignored. Give the bundled copy a plain soname and
         # rewrite each binary's NEEDED to the bare name so $ORIGIN resolves it.
         patchelf --set-soname libwgpu_native.so "$STAGE/libwgpu_native.so"
-        for bin in nordstjernen nordstjernen-renderer; do
+        for bin in northstar northstar-renderer; do
             [ -e "$STAGE/$bin" ] || continue
             cur=$(patchelf --print-needed "$STAGE/$bin" \
                   | grep -E '(^|/)libwgpu_native\.so$' | head -1)
@@ -178,14 +178,14 @@ This build includes experimental WebGPU (`navigator.gpu`) over the bundled
 `libwgpu_native.so` (loaded from beside the binary via an `$ORIGIN` rpath). It
 is **off by default**; start the browser with `--enable-webgpu` to turn it on:
 
-    ./nordstjernen --enable-webgpu https://example.com
+    ./northstar --enable-webgpu https://example.com
 '
 else
     WEBGPU_RUN_NOTE=''
 fi
 
 cat > "$STAGE/INSTALL.md" <<EOF
-# Nordstjernen ${VERSION} — Linux ${ARCH} binary
+# Northstar ${VERSION} — Linux ${ARCH} binary
 
 Stripped, LTO-optimised build. The browser engine itself (lexbor for
 HTML, quickjs for JavaScript, wuffs for image decoding, wamr for
@@ -222,14 +222,14 @@ For Linux distros without modern GTK 4, build an AppImage instead
 
 ## Run
 
-    ./nordstjernen https://example.com
+    ./northstar https://example.com
 ${WEBGPU_RUN_NOTE}
 
 ## Install on user path
 
-    install -Dm755 nordstjernen ~/.local/bin/nordstjernen
-    install -Dm644 data/icons/hicolor/scalable/apps/nordstjernen.svg \\
-        ~/.local/share/icons/hicolor/scalable/apps/nordstjernen.svg
+    install -Dm755 northstar ~/.local/bin/northstar
+    install -Dm644 data/icons/hicolor/scalable/apps/northstar.svg \\
+        ~/.local/share/icons/hicolor/scalable/apps/northstar.svg
 
 ## License
 
@@ -244,8 +244,8 @@ rm -f "$ZIP"
 [ -s "$ZIP" ] || { log "ERROR: $ZIP missing or empty after zip"; exit 1; }
 
 zip_size=$(du -h "$ZIP" 2>/dev/null | cut -f1 || echo '?')
-bin_size=$(du -h "$STAGE/nordstjernen" 2>/dev/null | cut -f1 || echo '?')
+bin_size=$(du -h "$STAGE/northstar" 2>/dev/null | cut -f1 || echo '?')
 echo "Built: $ZIP ($zip_size)"
 echo "Binary size: $bin_size"
 echo
-echo "Smoke test: ./dist/${SLUG}/nordstjernen --headless --url=https://example.com --dump=text"
+echo "Smoke test: ./dist/${SLUG}/northstar --headless --url=https://example.com --dump=text"

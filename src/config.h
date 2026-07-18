@@ -1,4 +1,4 @@
-/* Nordstjernen — runtime config (flat key/value file).
+/* Northstar — runtime config (flat key/value file).
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -85,7 +85,7 @@ gboolean         ns_config_save(GError **error);
 void             ns_config_lock(void);
 void             ns_config_unlock(void);
 
-#define NS_APP_DIR_NAME "nordstjernen"
+#define NS_APP_DIR_NAME "northstar"
 
 G_END_DECLS
 

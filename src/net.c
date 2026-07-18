@@ -1,4 +1,4 @@
-/* Nordstjernen — libcurl-backed async fetcher.
+/* Northstar — libcurl-backed async fetcher.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -367,9 +367,9 @@ static const char *
 ns_net_private_root(void)
 {
     if (g_private_root) return g_private_root;
-    g_private_root = g_dir_make_tmp("nordstjernen-private-XXXXXX", NULL);
+    g_private_root = g_dir_make_tmp("northstar-private-XXXXXX", NULL);
     if (!g_private_root) {
-        char *base = g_strdup_printf("nordstjernen-private-%u", g_random_int());
+        char *base = g_strdup_printf("northstar-private-%u", g_random_int());
         g_private_root = g_build_filename(g_get_tmp_dir(), base, NULL);
         g_free(base);
         g_mkdir_with_parents(g_private_root, 0700);
@@ -1143,7 +1143,7 @@ gboolean
 ns_user_agent_has_client_hints(const char *user_agent)
 {
     return user_agent && strstr(user_agent, "Chrome/") &&
-           !strstr(user_agent, "Nordstjernen/") &&
+           !strstr(user_agent, "Northstar/") &&
            !strstr(user_agent, "Ladybird/");
 }
 
@@ -2521,10 +2521,10 @@ about_logo_data_uri(void)
     if (cached) return cached;
 
     static const char *const gif_paths[] = {
-        "share/icons/hicolor/scalable/apps/nordstjernen.gif",
-        "../share/icons/hicolor/scalable/apps/nordstjernen.gif",
-        "../../data/icons/hicolor/scalable/apps/nordstjernen.gif",
-        "data/icons/hicolor/scalable/apps/nordstjernen.gif",
+        "share/icons/hicolor/scalable/apps/northstar.gif",
+        "../share/icons/hicolor/scalable/apps/northstar.gif",
+        "../../data/icons/hicolor/scalable/apps/northstar.gif",
+        "data/icons/hicolor/scalable/apps/northstar.gif",
         NULL,
     };
     gsize gif_len = 0;
@@ -2555,7 +2555,7 @@ about_splash_markup(void)
     char *uri = g_strconcat("data:image/png;base64,", about_splash_png_b64, NULL);
     char *markup = g_strdup_printf(
         "<img class=\"splash\" src=\"%s\" "
-        "alt=\"Nordstjernen " NS_VERSION " splash\" "
+        "alt=\"Northstar " NS_VERSION " splash\" "
         "style=\"display:block;width:auto;max-width:96%%;height:auto;"
         "margin:2px auto 36px;border-radius:14px;\">",
         uri);
@@ -2633,7 +2633,7 @@ about_diagnostics_html(void)
     g_free(cores);
 
     g_string_append(s, "<h3>Version &amp; libraries</h3>");
-    diag_kv(s, "Nordstjernen", NS_VERSION " (built " NS_BUILD_DATE ")");
+    diag_kv(s, "Northstar", NS_VERSION " (built " NS_BUILD_DATE ")");
     diag_kv(s, "JavaScript (QuickJS)", JS_GetVersion());
 #ifdef NS_LEXBOR_VERSION
     diag_kv(s, "HTML / CSS (lexbor)", NS_LEXBOR_VERSION);
@@ -2728,16 +2728,16 @@ static char *
 build_about_license(void)
 {
     static const char *const paths[] = {
-        "nordstjernen/LICENSE",
-        "share/nordstjernen/LICENSE",
-        "../share/nordstjernen/LICENSE",
+        "northstar/LICENSE",
+        "share/northstar/LICENSE",
+        "../share/northstar/LICENSE",
         "../../../LICENSE",
         "../../LICENSE",
         "LICENSE",
         NULL,
     };
-    return build_about_markdown_page(paths, "Nordstjernen Source License",
-                                     "about:nordstjernen", "About Nordstjernen",
+    return build_about_markdown_page(paths, "GNU General Public License",
+                                     "about:northstar", "About Northstar",
                                      "LICENSE");
 }
 
@@ -2745,16 +2745,16 @@ static char *
 build_about_third_party(void)
 {
     static const char *const paths[] = {
-        "nordstjernen/THIRD-PARTY-LICENSES.md",
-        "share/nordstjernen/THIRD-PARTY-LICENSES.md",
-        "../share/nordstjernen/THIRD-PARTY-LICENSES.md",
+        "northstar/THIRD-PARTY-LICENSES.md",
+        "share/northstar/THIRD-PARTY-LICENSES.md",
+        "../share/northstar/THIRD-PARTY-LICENSES.md",
         "../../../THIRD-PARTY-LICENSES.md",
         "../../THIRD-PARTY-LICENSES.md",
         "THIRD-PARTY-LICENSES.md",
         NULL,
     };
     return build_about_markdown_page(paths, "Third-party software notices",
-                                     "about:nordstjernen", "About Nordstjernen",
+                                     "about:northstar", "About Northstar",
                                      "THIRD-PARTY-LICENSES.md");
 }
 
@@ -2772,14 +2772,14 @@ classify_error(long status, const char *transport_error)
         "📡",
         "Can't reach the network",
         "Can't reach the network",
-        "Nordstjernen couldn't connect to any server. Your device may be "
+        "Northstar couldn't connect to any server. Your device may be "
         "offline, or a firewall is blocking outbound traffic."
     };
     static const ns_error_info DNS = {
         "🔍",
         "Server address not found",
         "Server address not found",
-        "Nordstjernen couldn't look up the host name. The address may be "
+        "Northstar couldn't look up the host name. The address may be "
         "mistyped, or your DNS resolver isn't responding."
     };
     static const ns_error_info REFUSED = {
@@ -2800,7 +2800,7 @@ classify_error(long status, const char *transport_error)
         "🔒",
         "Secure connection failed",
         "Secure connection failed",
-        "Nordstjernen couldn't establish a trustworthy TLS connection. "
+        "Northstar couldn't establish a trustworthy TLS connection. "
         "The certificate may be invalid, expired, or self-signed."
     };
     static const ns_error_info BAD_URL = {
@@ -2827,7 +2827,7 @@ classify_error(long status, const char *transport_error)
         "🔐",
         "Authentication required",
         "Authentication required",
-        "The server needs credentials Nordstjernen doesn't have. Sign in "
+        "The server needs credentials Northstar doesn't have. Sign in "
         "elsewhere first, or try a different URL."
     };
     static const ns_error_info HTTP_403 = {
@@ -2958,7 +2958,7 @@ ns_build_error_page(const char *url, long status, const char *transport_error)
         "<!doctype html><html><head><meta charset=\"utf-8\">"
         "<title>");
     g_string_append(out, esc_title);
-    g_string_append(out, " — Nordstjernen</title>"
+    g_string_append(out, " — Northstar</title>"
         "<style>"
         "body{font-family:system-ui,-apple-system,\"Segoe UI\","
         "Helvetica,Arial,sans-serif;background:#f5f5f8;color:#1b1b22;"
@@ -3904,7 +3904,7 @@ static const char k_about_start_template[] =
     "<meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
     "<meta name=\"color-scheme\" content=\"light\">"
-    "<title>Nordstjernen</title>"
+    "<title>Northstar</title>"
     "<style>\n"
     "html, body { background:#ffffff; color:#111418;"
     " font-family: system-ui, -apple-system, \"Segoe UI\","
@@ -3990,7 +3990,7 @@ static const char k_about_ai_window_template[] =
     "<meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
     "<meta name=\"color-scheme\" content=\"light\">"
-    "<title>AI Window \xe2\x80\x94 Nordstjernen</title>"
+    "<title>AI Window \xe2\x80\x94 Northstar</title>"
     "<style>\n"
     "html, body { background:#ffffff; color:#111418;"
     " font-family: system-ui, -apple-system, \"Segoe UI\","
@@ -4269,7 +4269,7 @@ static const char k_about_start_template[] =
     "<meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
     "<meta name=\"color-scheme\" content=\"light\">"
-    "<title>Nordstjernen</title>"
+    "<title>Northstar</title>"
     "<style>\n"
     "html, body { background:#ffffff; color:#111418;"
     " font-family: system-ui, -apple-system, \"Segoe UI\","
@@ -4342,12 +4342,12 @@ static const char k_about_start_template[] =
     "</script></body></html>";
 #endif
 
-static const char k_about_nordstjernen_template[] =
+static const char k_about_northstar_template[] =
     "<!doctype html><html lang=\"en\"><head>"
     "<meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
     "<meta name=\"color-scheme\" content=\"light\">"
-    "<title>About Nordstjernen</title>"
+    "<title>About Northstar</title>"
     "<style>\n"
     "html, body { background:#ffffff; color:#111418;"
     " font-family: system-ui, -apple-system, \"Segoe UI\","
@@ -4404,15 +4404,16 @@ static const char k_about_nordstjernen_template[] =
     "<body><main class=\"wrap\">"
     "<div class=\"head\">"
     "__ND_LOGO_MARK__"
-    "<div class=\"title\">Nordstjernen</div>"
+    "<div class=\"title\">Northstar</div>"
     "<div class=\"ver\">Version " NS_VERSION "</div>"
     "<div class=\"tagline\">The unique, legendary web browser</div>"
     "</div>"
     "<p class=\"intro\">A web browser implemented in C.</p>"
     "<section class=\"license\">"
     "<h2>License</h2>"
-    "<p>Nordstjernen is distributed under the <b>Nordstjernen Source "
-    "License v1.0 (NSL-1.0)</b>, \xc2\xa9 2026 Andreas R\xc3\xb8sdal.</p>"
+    "<p>Northstar is free software, distributed under the <b>GNU General "
+    "Public License, version 3 or later</b>, \xc2\xa9 2026 Andreas "
+    "R\xc3\xb8sdal.</p>"
     "<p class=\"third\">It bundles third-party open-source software under "
     "the MIT, BSD, Apache\xc2\xa0" "2.0, LGPL, MPL and zlib licenses \xe2"
     "\x80\x94 including lexbor, QuickJS, Wuffs, GTK\xc2\xa0" "4, Cairo, "
@@ -4420,14 +4421,14 @@ static const char k_about_nordstjernen_template[] =
     "component\xe2\x80\x99s copyright notice and full license text is "
     "reproduced in the notices below.</p>"
     "<ul class=\"docs\">"
-    "<li><a href=\"about:license\">Nordstjernen Source License (NSL-1.0)"
+    "<li><a href=\"about:license\">GNU General Public License (GPL-3.0)"
     " \xe2\x86\x92</a></li>"
     "<li><a href=\"about:third-party\">Third-party software notices \xe2"
     "\x86\x92</a></li>"
     "</ul>"
     "</section>"
     "__ND_DIAG__"
-    "<p class=\"copy\">Nordstjernen Web Browser \xc2\xa9 2026 "
+    "<p class=\"copy\">Northstar Web Browser \xc2\xa9 2026 "
     "Andreas R\xc3\xb8sdal</p>"
     "<p class=\"links\">"
     "<a href=\"about:start\">\xe2\x86\x90 Start</a>"
@@ -4666,7 +4667,7 @@ static const char *
 about_start_tagline(void)
 {
     static const char *const taglines[] = {
-        "Nordstjernen the unique web browser",
+        "Northstar the unique web browser",
         "Northstar the unique web browser",
         "Nordstjärnan the unique web browser",
         "Étoile du Nord the unique web browser",
@@ -4842,9 +4843,9 @@ synthesize_about_response(const char *url, const char *top_url,
         g_byte_array_append(resp->body, (const guint8 *)json,
                             (guint)strlen(json));
         g_free(json);
-    } else if (g_str_equal(what, "nordstjernen") || g_str_equal(what, "about")) {
+    } else if (g_str_equal(what, "northstar") || g_str_equal(what, "about")) {
         char *logo_markup = about_logo_markup();
-        char *with_logo = about_substitute(k_about_nordstjernen_template,
+        char *with_logo = about_substitute(k_about_northstar_template,
                                            "__ND_LOGO_MARK__", logo_markup);
         g_free(logo_markup);
         char *diag = about_diagnostics_html();
@@ -4881,7 +4882,7 @@ synthesize_about_response(const char *url, const char *top_url,
         about_settings_clear();
         about_emit_json(resp, g_strdup("{\"ok\":true}"));
     } else {
-        const char *body = "<!doctype html><title>Nordstjernen</title>";
+        const char *body = "<!doctype html><title>Northstar</title>";
         g_byte_array_append(resp->body, (const guint8 *)body, (guint)strlen(body));
     }
     return TRUE;
@@ -6010,7 +6011,7 @@ ns_multipart_boundary(void)
         r[0] = g_random_int(); r[1] = g_random_int();
         r[2] = g_random_int(); r[3] = g_random_int();
     }
-    return g_strdup_printf("----NordstjernenFormBoundary%08x%08x%08x%08x",
+    return g_strdup_printf("----NorthstarFormBoundary%08x%08x%08x%08x",
                            r[0], r[1], r[2], r[3]);
 }
 

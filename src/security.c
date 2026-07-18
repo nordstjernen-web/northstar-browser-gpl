@@ -1,4 +1,4 @@
-/* Nordstjernen — refuse privileged startup + Linux Landlock + seccomp sandbox.
+/* Northstar — refuse privileged startup + Linux Landlock + seccomp sandbox.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -234,11 +234,11 @@ ns_security_refuse_root(void)
 #if defined(__linux__) || defined(__APPLE__)
     if (geteuid() != 0 && getuid() != 0) return TRUE;
     if (g_getenv("NS_ALLOW_ROOT")) {
-        g_warning("nordstjernen: running as root because NS_ALLOW_ROOT is set");
+        g_warning("northstar: running as root because NS_ALLOW_ROOT is set");
         return TRUE;
     }
     fprintf(stderr,
-        "nordstjernen: refusing to run as root.\n"
+        "northstar: refusing to run as root.\n"
         "  Web browsers process untrusted content; running as root exposes\n"
         "  the whole system if the renderer is compromised.\n"
         "  Re-run as an unprivileged user, or set NS_ALLOW_ROOT=1 to override.\n");
@@ -246,27 +246,27 @@ ns_security_refuse_root(void)
 #elif defined(G_OS_WIN32)
     if (!ns_win_is_elevated()) return TRUE;
     if (g_getenv("NS_ALLOW_ROOT")) {
-        g_warning("nordstjernen: running as Administrator because "
+        g_warning("northstar: running as Administrator because "
                   "NS_ALLOW_ROOT is set");
         return TRUE;
     }
     if (!g_getenv("NS_DEELEVATED") && ns_win_relaunch_deelevated()) {
-        g_warning("nordstjernen: dropped Administrator rights by relaunching "
+        g_warning("northstar: dropped Administrator rights by relaunching "
                   "as the current desktop user");
         return FALSE;
     }
 
     const char *msg =
-        "Nordstjernen is running as administrator.\n"
+        "Northstar is running as administrator.\n"
         "\n"
-        "Nordstjernen tried to restart itself without administrator rights but "
+        "Northstar tried to restart itself without administrator rights but "
         "could not. You do not need administrator rights to browse the web, and "
         "it is much safer without them: if a web page exploited a flaw in the "
         "browser while it has administrator rights, it could take over your "
         "whole PC instead of being limited to your own user account.\n"
         "\n"
-        "How to start Nordstjernen normally:\n"
-        "  -  Close this window, then open Nordstjernen with a normal click on "
+        "How to start Northstar normally:\n"
+        "  -  Close this window, then open Northstar with a normal click on "
         "its Start-menu or desktop icon. Do not choose \"Run as "
         "administrator\".\n"
         "  -  If you started it from a Command Prompt or PowerShell, use an "
@@ -276,16 +276,16 @@ ns_security_refuse_root(void)
         "administrator\".\n"
         "\n"
         "Do you want to run as administrator anyway?\n"
-        "  -  No (recommended): quit, then reopen Nordstjernen normally.\n"
+        "  -  No (recommended): quit, then reopen Northstar normally.\n"
         "  -  Yes: run as administrator this once, at your own risk.";
-    fprintf(stderr, "nordstjernen: %s\n", msg);
+    fprintf(stderr, "northstar: %s\n", msg);
 
     int choice = MessageBoxA(NULL, msg,
-        "Nordstjernen - running as administrator",
+        "Northstar - running as administrator",
         MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2 |
         MB_SETFOREGROUND | MB_TOPMOST);
     if (choice == IDYES) {
-        g_warning("nordstjernen: running as Administrator at the user's "
+        g_warning("northstar: running as Administrator at the user's "
                   "request");
         return TRUE;
     }
@@ -432,25 +432,25 @@ ns_security_sandbox_init(const char *self_exe)
     add_path_rw(rfd, fs_rw,   g_get_user_runtime_dir());
 
     char *ns_cfg_root =
-        g_build_filename(g_get_user_config_dir(), "nordstjernen", NULL);
+        g_build_filename(g_get_user_config_dir(), "northstar", NULL);
     g_mkdir_with_parents(ns_cfg_root, 0700);
     add_path_rw(rfd, fs_rw, ns_cfg_root);
     g_free(ns_cfg_root);
 
     char *ns_data_root =
-        g_build_filename(g_get_user_data_dir(), "nordstjernen", NULL);
+        g_build_filename(g_get_user_data_dir(), "northstar", NULL);
     g_mkdir_with_parents(ns_data_root, 0700);
     add_path_rw(rfd, fs_rw, ns_data_root);
     g_free(ns_data_root);
 
     char *ns_cache_top =
-        g_build_filename(g_get_user_cache_dir(), "nordstjernen", NULL);
+        g_build_filename(g_get_user_cache_dir(), "northstar", NULL);
     g_mkdir_with_parents(ns_cache_top, 0700);
     add_path_rw(rfd, fs_rw, ns_cache_top);
     g_free(ns_cache_top);
 
     char *ns_cache_root =
-        g_build_filename(g_get_user_cache_dir(), "nordstjernen", "cache", NULL);
+        g_build_filename(g_get_user_cache_dir(), "northstar", "cache", NULL);
     g_mkdir_with_parents(ns_cache_root, 0700);
     add_path_rw(rfd, fs_rw, ns_cache_root);
     g_free(ns_cache_root);
@@ -485,7 +485,7 @@ ns_security_sandbox_init(const char *self_exe)
             "../data",
             "../../data",
             "../../../data",
-            "../share/nordstjernen",
+            "../share/northstar",
             NULL,
         };
         for (gsize i = 0; dev_data_rel[i]; i++) {
@@ -886,13 +886,13 @@ ns_security_sandbox_init(const char *self_exe)
 
     sb_append_subpath(prof, g_get_user_runtime_dir());
 
-    char *cfg = g_build_filename(g_get_user_config_dir(), "nordstjernen", NULL);
+    char *cfg = g_build_filename(g_get_user_config_dir(), "northstar", NULL);
     sb_append_subpath(prof, cfg);
     g_free(cfg);
-    char *data = g_build_filename(g_get_user_data_dir(), "nordstjernen", NULL);
+    char *data = g_build_filename(g_get_user_data_dir(), "northstar", NULL);
     sb_append_subpath(prof, data);
     g_free(data);
-    char *cache = g_build_filename(g_get_user_cache_dir(), "nordstjernen", NULL);
+    char *cache = g_build_filename(g_get_user_cache_dir(), "northstar", NULL);
     sb_append_subpath(prof, cache);
     g_free(cache);
 
@@ -995,7 +995,7 @@ ns_security_mark_download_origin(const char *path, const char *url)
 #if defined(__APPLE__)
     (void)url;
     char value[96];
-    g_snprintf(value, sizeof value, "0001;%08x;Nordstjernen;",
+    g_snprintf(value, sizeof value, "0001;%08x;Northstar;",
                (unsigned)(g_get_real_time() / G_USEC_PER_SEC));
     setxattr(path, "com.apple.quarantine", value, strlen(value), 0, 0);
 #elif defined(__linux__)

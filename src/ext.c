@@ -1,4 +1,4 @@
-/* Nordstjernen — WebExtensions loader and content-script host.
+/* Northstar — WebExtensions loader and content-script host.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -778,7 +778,7 @@ ns_ext_load_filter_list(ns_ext *e, const char *path)
 static void
 ns_ext_parse_filter_lists(ns_ext *e, JSContext *ctx, JSValueConst manifest)
 {
-    JSValue arr = JS_GetPropertyStr(ctx, manifest, "nordstjernen_filter_lists");
+    JSValue arr = JS_GetPropertyStr(ctx, manifest, "northstar_filter_lists");
     if (JS_IsObject(arr)) {
         GPtrArray *paths = g_ptr_array_new_with_free_func(g_free);
         ns_ext_collect_strings(ctx, arr, paths);
@@ -982,7 +982,7 @@ ns_ext_content_scripts_for_url(JSContext *ctx, JSValueConst global,
                 g_string_append(body, "\n");
             }
             g_string_append(body,
-                "}catch(e){try{console.error(\"[nordstjernen ext]\",e);}"
+                "}catch(e){try{console.error(\"[northstar ext]\",e);}"
                 "catch(_){}}})(");
             if (cs->all_js) {
                 g_string_append(body, "make_api(\"");

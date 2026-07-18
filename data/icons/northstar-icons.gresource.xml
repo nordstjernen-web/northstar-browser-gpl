@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/org/northstar/WebBrowser/icons/scalable/apps">
+    <file alias="northstar.svg">hicolor/scalable/apps/northstar.svg</file>
+    <file alias="northstar-back.svg">hicolor/scalable/apps/northstar-back.svg</file>
+    <file alias="northstar-forward.svg">hicolor/scalable/apps/northstar-forward.svg</file>
+    <file alias="northstar-home.svg">hicolor/scalable/apps/northstar-home.svg</file>
+    <file alias="northstar-reload.svg">hicolor/scalable/apps/northstar-reload.svg</file>
+    <file alias="northstar-stop.svg">hicolor/scalable/apps/northstar-stop.svg</file>
+    <file alias="northstar-go.svg">hicolor/scalable/apps/northstar-go.svg</file>
+    <file alias="northstar-bookmarks.svg">hicolor/scalable/apps/northstar-bookmarks.svg</file>
+    <file alias="northstar-ai.svg">hicolor/scalable/apps/northstar-ai.svg</file>
+    <file alias="northstar-console.svg">hicolor/scalable/apps/northstar-console.svg</file>
+    <file alias="northstar-settings.svg">hicolor/scalable/apps/northstar-settings.svg</file>
+    <file alias="northstar-about.svg">hicolor/scalable/apps/northstar-about.svg</file>
+    <file alias="northstar-stage-connect.svg">hicolor/scalable/apps/northstar-stage-connect.svg</file>
+    <file alias="northstar-stage-fetch.svg">hicolor/scalable/apps/northstar-stage-fetch.svg</file>
+    <file alias="northstar-stage-parse.svg">hicolor/scalable/apps/northstar-stage-parse.svg</file>
+    <file alias="northstar-stage-script.svg">hicolor/scalable/apps/northstar-stage-script.svg</file>
+    <file alias="northstar-stage-render.svg">hicolor/scalable/apps/northstar-stage-render.svg</file>
+    <file alias="northstar-stage-done.svg">hicolor/scalable/apps/northstar-stage-done.svg</file>
+  </gresource>
+</gresources>

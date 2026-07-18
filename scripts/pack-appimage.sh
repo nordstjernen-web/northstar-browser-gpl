@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a Nordstjernen AppImage. Uses linuxdeploy + its GTK plugin to
+# Build a Northstar AppImage. Uses linuxdeploy + its GTK plugin to
 # bundle the GTK 4 stack (libs, typelibs, pixbuf loaders, GIO modules)
 # so the AppImage runs on distros without modern GTK preinstalled.
 set -euo pipefail
@@ -8,7 +8,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 VERSION=$(grep -E "^[[:space:]]*version" "$ROOT/meson.build" | head -1 \
           | sed -E "s/.*version: '([^']+)'.*/\1/")
 ARCH=$(uname -m)
-NAME=nordstjernen
+NAME=northstar
 BUILDDIR="$ROOT/build-appimage"
 APPDIR="$ROOT/dist/AppDir"
 TOOLS="$ROOT/dist/appimage-tools"
@@ -65,13 +65,13 @@ rm -rf "$APPDIR/usr/include" "$APPDIR/usr/lib" "$APPDIR/usr/lib64" \
        "$APPDIR/usr/lib32"
 
 install -dm755 "$APPDIR/usr/share/applications"
-install -m644 "$ROOT/data/nordstjernen.desktop" \
-    "$APPDIR/usr/share/applications/org.nordstjernen.WebBrowser.desktop"
+install -m644 "$ROOT/data/northstar.desktop" \
+    "$APPDIR/usr/share/applications/org.northstar.WebBrowser.desktop"
 
 install -dm755 "$APPDIR/usr/share/icons/hicolor/256x256/apps"
-ICON_SVG="$ROOT/data/icons/hicolor/scalable/apps/nordstjernen.svg"
-ICON_GIF="$ROOT/data/icons/hicolor/scalable/apps/nordstjernen.gif"
-PNG_ICON="$APPDIR/usr/share/icons/hicolor/256x256/apps/nordstjernen.png"
+ICON_SVG="$ROOT/data/icons/hicolor/scalable/apps/northstar.svg"
+ICON_GIF="$ROOT/data/icons/hicolor/scalable/apps/northstar.gif"
+PNG_ICON="$APPDIR/usr/share/icons/hicolor/256x256/apps/northstar.png"
 if command -v rsvg-convert >/dev/null 2>&1; then
     rsvg-convert -w 256 -h 256 -o "$PNG_ICON" "$ICON_SVG"
 elif command -v magick >/dev/null 2>&1; then
@@ -84,13 +84,13 @@ else
 fi
 
 cd "$ROOT/dist"
-rm -f "${NAME}-${VERSION}-${ARCH}.AppImage" "Nordstjernen"*.AppImage
+rm -f "${NAME}-${VERSION}-${ARCH}.AppImage" "Northstar"*.AppImage
 DEPLOY_GTK_VERSION=4 \
 "$LINUXDEPLOY" --appimage-extract-and-run \
     --appdir "$APPDIR" \
-    --executable "$APPDIR/usr/bin/nordstjernen" \
-    --executable "$APPDIR/usr/bin/nordstjernen-renderer" \
-    --desktop-file "$APPDIR/usr/share/applications/org.nordstjernen.WebBrowser.desktop" \
+    --executable "$APPDIR/usr/bin/northstar" \
+    --executable "$APPDIR/usr/bin/northstar-renderer" \
+    --desktop-file "$APPDIR/usr/share/applications/org.northstar.WebBrowser.desktop" \
     --icon-file "$PNG_ICON" \
     --plugin gtk
 

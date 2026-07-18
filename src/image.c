@@ -1,4 +1,4 @@
-/* Nordstjernen — image cache (PNG/JPEG/GIF/SVG).
+/* Northstar — image cache (PNG/JPEG/GIF/SVG).
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

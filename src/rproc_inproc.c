@@ -1,4 +1,4 @@
-/* Nordstjernen — single-process mode: serves every tab's renderer session on
+/* Northstar — single-process mode: serves every tab's renderer session on
    the shell's main-context thread instead of per-tab renderer processes.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -16,7 +16,7 @@
 #endif
 
 #include "ipc_http.h"
-#include "libnordstjernen.h"
+#include "libnorthstar.h"
 #include "renderer_serve.h"
 #include "rproc_http.h"
 

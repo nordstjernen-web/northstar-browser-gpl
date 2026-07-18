@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Nordstjernen Speedometer 3.1 benchmark harness.
+# Northstar Speedometer 3.1 benchmark harness.
 #
 # Speedometer's own runner loads every workload inside an <iframe>, and
-# Nordstjernen renders iframes as display:none and runs no nested browsing
+# Northstar renders iframes as display:none and runs no nested browsing
 # context, so the official aggregate harness cannot drive the engine. This
 # script instead loads each Speedometer 3.1 TodoMVC workload directly and
 # replays Speedometer's *own* per-suite interaction steps (Adding100Items,
@@ -21,7 +21,7 @@
 #   only suites whose path contains the substring run (e.g. "react", "complex").
 #
 # Environment overrides:
-#   NS_BIN              browser binary (default builddir/src/gtk/nordstjernen)
+#   NS_BIN              browser binary (default builddir/src/gtk/northstar)
 #   NS_SPEEDOMETER_DIR  scratch checkout (default $TMPDIR/nd-speedometer31)
 #   NS_ITERS            iterations per suite, median reported (default 3)
 #   NS_SETTLE           headless settle budget in ms (default 8000)
@@ -30,7 +30,7 @@ set -euo pipefail
 export LC_NUMERIC=C
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BIN=${NS_BIN:-$ROOT/builddir/src/gtk/nordstjernen}
+BIN=${NS_BIN:-$ROOT/builddir/src/gtk/northstar}
 export NS_ALLOW_ROOT=${NS_ALLOW_ROOT:-1}
 WORK=${NS_SPEEDOMETER_DIR:-${TMPDIR:-/tmp}/nd-speedometer31}
 PORT=${NS_PORT:-8123}

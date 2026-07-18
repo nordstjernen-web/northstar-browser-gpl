@@ -1,5 +1,5 @@
 name: Report an issue
-description: File a bug report or request for Nordstjernen.
+description: File a bug report or request for Northstar.
 body:
   - type: input
     id: reporter-name

@@ -1,6 +1,6 @@
 # Security policy
 
-Nordstjernen is a small independent web browser. Security fixes ship from
+Northstar is a small independent web browser. Security fixes ship from
 `main`; only the latest tagged release is supported.
 
 ## Reporting
@@ -9,13 +9,13 @@ Report security issues by e-mail to:  andreas.rosdal (at) hotmail.com
 Secondary backup method is to report issues to Github here: 
 https://github.com/nordstjernen-web/nordstjernen/issues
 
-Please include the version (shown in the About Nordstjernen dialog),
+Please include the version (shown in the About Northstar dialog),
 your OS, a minimal reproducer (URL or self-contained HTML), and your
 assessment of the impact.
 
 ## Threat model
 
-Nordstjernen treats the Internet with the outmost suspicion. The attacker controls fetched
+Northstar treats the Internet with the outmost suspicion. The attacker controls fetched
 HTML, CSS, JavaScript, images, fonts, media, and PDFs. The user, the
 kernel, and the local filesystem outside the sandbox allow-list are
 trusted.
@@ -48,7 +48,7 @@ trusted.
 ## Defenses
 
 The browser renders each tab's untrusted content in its own
-sandboxed renderer process (`nordstjernen-renderer`); the GTK shell
+sandboxed renderer process (`northstar-renderer`); the GTK shell
 is a thin, engine-free display/input process that spawns the renderers
 and blits their shared-memory framebuffers. Defenses are layered so that
 a memory-safety bug in the engine is confined to a per-tab renderer
@@ -87,7 +87,7 @@ work without writable executable pages.
 
 Two independent layers, both default-deny, both installed before any HTML
 is parsed. They describe the **per-tab renderer process**
-(`ns_browser_sandbox`, applied by the `nordstjernen-renderer` entry point
+(`ns_browser_sandbox`, applied by the `northstar-renderer` entry point
 in `src/renderer_http.c`), which parses all untrusted
 content and therefore holds the strongest confinement. The thin UI shell
 parses no untrusted bytes but must `fork`/`execve` the renderer processes,
@@ -101,8 +101,8 @@ socket, so it normally needs no `/dev/shm` name at all.
   (`/usr`, `/lib`, `/lib64`), `/etc`, the CA bundle, font caches,
   `/dev/urandom`, and the X11 / Wayland sockets. Read+write access to
   the per-user XDG config, data, and cache directories under
-  `~/.config/nordstjernen`, `~/.local/share/nordstjernen`,
-  `~/.cache/nordstjernen`. The rest of `$HOME` — `~/.ssh`, `~/.aws`,
+  `~/.config/northstar`, `~/.local/share/northstar`,
+  `~/.cache/northstar`. The rest of `$HOME` — `~/.ssh`, `~/.aws`,
   `~/.netrc`, other browsers' state, shell history — is **not**
   reachable. No directory the renderer can write to is also
   executable.
@@ -117,7 +117,7 @@ socket, so it normally needs no `/dev/shm` name at all.
   `perf_event_open`, `kexec_load`, and the module syscalls are likewise
   absent from the allow-list. TSYNC propagates the filter to every
   thread.
-- **Media launcher.** Nordstjernen ships no audio/video codecs; playback
+- **Media launcher.** Northstar ships no audio/video codecs; playback
   is handed off to an external player. The seccomp-confined renderer has
   `execve` blocked, so it cannot launch anything: when the user clicks an
   `<audio>`/`<video>` element the renderer only *resolves* the media URL
@@ -144,14 +144,14 @@ macOS has no Landlock or seccomp, but it ships the **Seatbelt** sandbox
 (`sandbox_init(3)`, `<sandbox.h>`) — a per-process, voluntary, post-launch
 confinement applied from an inline Sandbox Profile Language (SBPL) policy.
 This is the same mechanism Chromium and Firefox use for their macOS renderer
-sandboxes. Nordstjernen applies it from the `__APPLE__` arm of
+sandboxes. Northstar applies it from the `__APPLE__` arm of
 `ns_security_sandbox_init` (`src/security.c`), to **both** the per-tab
-`nordstjernen-renderer` and the UI shell, before any HTML is parsed.
+`northstar-renderer` and the UI shell, before any HTML is parsed.
 
 - **Filesystem write-confinement.** The profile is `(allow default)` then
   `(deny file-write*)` then a re-allow of the same write set the Linux
-  Landlock layer permits: the per-user `~/.config/nordstjernen`,
-  `~/.local/share/nordstjernen`, `~/.cache/nordstjernen`, the GLib runtime
+  Landlock layer permits: the per-user `~/.config/northstar`,
+  `~/.local/share/northstar`, `~/.cache/northstar`, the GLib runtime
   dir, the user's Downloads directory, the system temp roots
   (`/private/var/folders`, `/private/tmp`, `/tmp`) and `/dev`. The rest of
   `$HOME` — `~/.ssh`, `~/.aws`, other browsers' state, shell history, the

@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Copyright 2026 Andreas Røsdal -->
 <component type="desktop-application">
-  <id>org.nordstjernen.WebBrowser</id>
+  <id>org.northstar.WebBrowser</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
-  <name>Nordstjernen</name>
+  <name>Northstar</name>
   <summary>A small, hand-written web browser</summary>
-  <developer id="org.nordstjernen">
+  <developer id="org.northstar">
     <name>Andreas Røsdal</name>
   </developer>
 
   <description>
     <p>
-      Nordstjernen is a clean-room web browser written from scratch in C,
+      Northstar is a clean-room web browser written from scratch in C,
       with a GTK 4 user interface and a libcurl network stack. It is built
       to be small, secure, and readable by a single person end to end.
     </p>
@@ -26,7 +26,7 @@
     </ul>
   </description>
 
-  <launchable type="desktop-id">org.nordstjernen.WebBrowser.desktop</launchable>
+  <launchable type="desktop-id">org.northstar.WebBrowser.desktop</launchable>
 
   <url type="homepage">https://nordstjernen.org</url>
   <url type="bugtracker">https://github.com/nordstjernen-web/nordstjernen/issues</url>
@@ -34,7 +34,7 @@
 
   <screenshots>
     <screenshot type="default">
-      <caption>The Nordstjernen start page</caption>
+      <caption>The Northstar start page</caption>
       <image>https://raw.githubusercontent.com/nordstjernen-web/nordstjernen/main/docs/screenshot.png</image>
     </screenshot>
   </screenshots>

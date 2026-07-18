@@ -1,4 +1,4 @@
-Name:           nordstjernen
+Name:           northstar
 Version:        0.8.1
 Release:        1%{?dist}
 Summary:        Clean-room, hardened web browser written from scratch in C
@@ -36,7 +36,7 @@ Recommends:     mpv
 ExclusiveOS:    linux
 
 %description
-Nordstjernen is an independent, lightweight web browser built entirely
+Northstar is an independent, lightweight web browser built entirely
 from scratch in C, using GTK 4 for the UI and libcurl for networking.
 It is a clean-room implementation with no upstream browser engine: the
 HTML parser (lexbor), the JavaScript interpreter (QuickJS), and the
@@ -58,7 +58,7 @@ applications. It does not phone home and does not telemeter the user.
 %files
 %license LICENSE
 %doc README.md
-%{_bindir}/nordstjernen
+%{_bindir}/northstar
 
 %changelog
 * Sun May 31 2026 Andreas Røsdal <andreas.rosdal@gmail.com> - 0.8.1-1

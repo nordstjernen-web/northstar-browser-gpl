@@ -1,4 +1,4 @@
-/* Nordstjernen — WebExtensions loader and content-script host.
+/* Northstar — WebExtensions loader and content-script host.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

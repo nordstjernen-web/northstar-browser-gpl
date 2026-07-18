@@ -1,4 +1,4 @@
-/* nordstjernen-audio: isolated MP3 / MPEG-1 audio playback helper driven over stdin/stdout.
+/* northstar-audio: isolated MP3 / MPEG-1 audio playback helper driven over stdin/stdout.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -1058,7 +1058,7 @@ write_temp_from_url(const char *url)
 #endif
         curl_easy_setopt(c, CURLOPT_TIMEOUT, 30L);
         curl_easy_setopt(c, CURLOPT_FAILONERROR, 1L);
-        curl_easy_setopt(c, CURLOPT_USERAGENT, "Nordstjernen-Audio");
+        curl_easy_setopt(c, CURLOPT_USERAGENT, "Northstar-Audio");
         curl_easy_setopt(c, CURLOPT_SSL_VERIFYPEER, 1L);
         curl_easy_setopt(c, CURLOPT_SSL_VERIFYHOST, 2L);
 #if defined(_WIN32) && defined(CURLSSLOPT_NATIVE_CA)

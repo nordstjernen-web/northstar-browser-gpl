@@ -1,4 +1,4 @@
-/* Nordstjernen — microphone capture (SDL) for getUserMedia audio + Web Audio.
+/* Northstar — microphone capture (SDL) for getUserMedia audio + Web Audio.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

@@ -1,4 +1,4 @@
-/* Nordstjernen — SQLite-indexed HTTP cache with on-disk bodies.
+/* Northstar — SQLite-indexed HTTP cache with on-disk bodies.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

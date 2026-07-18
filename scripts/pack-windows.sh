@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a redistributable Nordstjernen Windows bundle: a root launcher plus the
+# Build a redistributable Northstar Windows bundle: a root launcher plus the
 # mingw64 DLLs and GTK runtime data under app/ so it runs outside MSYS2.
 #
 # Builds (or reuses) a separate --buildtype=release tree in $BUILDDIR so the
@@ -9,13 +9,13 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 BUILDDIR=${BUILDDIR:-$ROOT/builddir-release}
-OUT=${OUT:-$ROOT/dist/nordstjernen-win64}
+OUT=${OUT:-$ROOT/dist/northstar-win64}
 APP=$OUT/app
-BIN_SRC=$BUILDDIR/src/gtk/nordstjernen.exe
-RENDERER_SRC=$BUILDDIR/src/nordstjernen-renderer.exe
-LAUNCHER_SRC=$BUILDDIR/src/nordstjernen-launcher.exe
-AUDIO_SRC=$BUILDDIR/src/nordstjernen-audio.exe
-BROWSER_EXE=nordstjernen-ui.exe
+BIN_SRC=$BUILDDIR/src/gtk/northstar.exe
+RENDERER_SRC=$BUILDDIR/src/northstar-renderer.exe
+LAUNCHER_SRC=$BUILDDIR/src/northstar-launcher.exe
+AUDIO_SRC=$BUILDDIR/src/northstar-audio.exe
+BROWSER_EXE=northstar-ui.exe
 EXTRA_MESON_SETUP_ARGS=()
 if [ -n "${NS_MESON_SETUP_ARGS:-}" ]; then
     EXTRA_MESON_SETUP_ARGS=($NS_MESON_SETUP_ARGS)
@@ -59,17 +59,17 @@ fi
 
 rm -rf "$OUT"
 mkdir -p "$APP"
-cp "$LAUNCHER_SRC" "$OUT/nordstjernen.exe"
+cp "$LAUNCHER_SRC" "$OUT/northstar.exe"
 cp "$BIN_SRC" "$APP/$BROWSER_EXE"
 # The browser spawns one sandboxed renderer process per tab; ship it next to
 # the browser exe so it is discovered without NS_RENDERER.
-cp "$RENDERER_SRC" "$APP/nordstjernen-renderer.exe"
+cp "$RENDERER_SRC" "$APP/northstar-renderer.exe"
 # Audio playback helper (MP2/MP3 decode + SDL2 output). Built whenever SDL2
 # was present at configure time; ship it beside the browser exe so the shell
 # finds it (ns_proc_audio_helper_path) and seed the DLL chase below with it so
 # SDL2.dll and its transitive deps are bundled (nothing else links SDL2).
 if [ -x "$AUDIO_SRC" ]; then
-    cp "$AUDIO_SRC" "$APP/nordstjernen-audio.exe"
+    cp "$AUDIO_SRC" "$APP/northstar-audio.exe"
 else
     echo "pack-windows: warning: $AUDIO_SRC missing; <video>/<audio> sound will not play" >&2
 fi
@@ -88,7 +88,7 @@ validate_launcher_imports() {
                 "$dep" >&2
             exit 1
         fi
-    done < <(objdump -p "$OUT/nordstjernen.exe" 2>/dev/null | awk '/DLL Name:/ {print $3}')
+    done < <(objdump -p "$OUT/northstar.exe" 2>/dev/null | awk '/DLL Name:/ {print $3}')
 }
 
 validate_launcher_imports
@@ -108,7 +108,7 @@ fi
 # *before* the DLL chase so the loaders' transitive deps (notably
 # librsvg-2-2.dll, pulled in only by pixbufloader_svg.dll) get bundled too.
 # GdkPixbuf loads these dynamically via loaders.cache, so their import edges
-# don't appear in nordstjernen.exe's static-import graph.
+# don't appear in northstar.exe's static-import graph.
 if [ -d "$MINGW_PREFIX/lib/gdk-pixbuf-2.0" ]; then
     mkdir -p "$APP/lib"
     cp -r "$MINGW_PREFIX/lib/gdk-pixbuf-2.0" "$APP/lib/"
@@ -118,8 +118,8 @@ fi
 # pixbuf loader DLL. objdump reports import names; we look them up in the
 # mingw bin dir and skip anything that resolves to a Windows system DLL.
 declare -A seen
-queue=("$APP/$BROWSER_EXE" "$APP/nordstjernen-renderer.exe")
-[ -f "$APP/nordstjernen-audio.exe" ] && queue+=("$APP/nordstjernen-audio.exe")
+queue=("$APP/$BROWSER_EXE" "$APP/northstar-renderer.exe")
+[ -f "$APP/northstar-audio.exe" ] && queue+=("$APP/northstar-audio.exe")
 for loader in "$APP"/lib/gdk-pixbuf-2.0/*/loaders/*.dll; do
     [ -f "$loader" ] && queue+=("$loader")
 done
@@ -186,16 +186,16 @@ for theme in Adwaita hicolor; do
     fi
 done
 
-# Nordstjernen's own application + toolbar icons (drop into the hicolor theme
-# so gtk_image_new_from_icon_name("nordstjernen-back") and friends resolve at
+# Northstar's own application + toolbar icons (drop into the hicolor theme
+# so gtk_image_new_from_icon_name("northstar-back") and friends resolve at
 # runtime, and about: pages can read the svg/gif as a data URI). The dev tree
 # finds these via the ../../data/icons search path; the bundle only has
-# share/icons, so every nordstjernen-*.svg the toolbar references must be
+# share/icons, so every northstar-*.svg the toolbar references must be
 # copied there or the header-bar buttons render blank. Refresh the hicolor
 # cache so the bundled icons show up without a filesystem scan.
 mkdir -p "$APP/share/icons/hicolor/scalable/apps"
-cp "$ROOT"/data/icons/hicolor/scalable/apps/nordstjernen*.svg \
-   "$ROOT/data/icons/hicolor/scalable/apps/nordstjernen.gif" \
+cp "$ROOT"/data/icons/hicolor/scalable/apps/northstar*.svg \
+   "$ROOT/data/icons/hicolor/scalable/apps/northstar.gif" \
    "$APP/share/icons/hicolor/scalable/apps/"
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     gtk-update-icon-cache --force --ignore-theme-index \
@@ -204,8 +204,8 @@ fi
 
 # Per-application data: license text. The browser reads it relative to
 # the exe at runtime (see src/net.c::about_read_first).
-mkdir -p "$APP/share/nordstjernen"
-cp "$ROOT/LICENSE" "$APP/share/nordstjernen/"
+mkdir -p "$APP/share/northstar"
+cp "$ROOT/LICENSE" "$APP/share/northstar/"
 
 # Third-party copyright + license notices required by the libraries we ship.
 cp "$ROOT/THIRD-PARTY-LICENSES.md" "$OUT/"

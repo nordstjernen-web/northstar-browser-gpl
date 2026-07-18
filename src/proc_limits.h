@@ -1,4 +1,4 @@
-/* Nordstjernen — shared limits for the out-of-process renderer shells (GTK).
+/* Northstar — shared limits for the out-of-process renderer shells (GTK).
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -20,6 +20,6 @@
 #define NS_PROC_RENDERER_ENV       "NS_RENDERER"
 #define NS_PROC_SETTLE_ENV         "NS_SETTLE_MS"
 #define NS_PROC_SINGLE_PROCESS_ENV "NS_SINGLE_PROCESS"
-#define NS_PROC_RENDERER_NAME "nordstjernen-renderer"
+#define NS_PROC_RENDERER_NAME "northstar-renderer"
 
 #endif

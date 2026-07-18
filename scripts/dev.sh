@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Nordstjernen dev helper: smoke-tests a built-in list of local fixtures through
+# Northstar dev helper: smoke-tests a built-in list of local fixtures through
 # the headless engine.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BIN=${NS_BIN:-$ROOT/builddir/src/gtk/nordstjernen}
+BIN=${NS_BIN:-$ROOT/builddir/src/gtk/northstar}
 export NS_ALLOW_ROOT=${NS_ALLOW_ROOT:-1}
 BASE=${NS_BASE:-$ROOT/data/baseline}
 
@@ -29,7 +29,7 @@ layout baselines are <slug>.layout.txt. Use layout targets for
 geometry (text-free, fixed-size fixtures) so the diff is font-stable.
 
 Env:
-  NS_BIN   path to nordstjernen binary (default: $BIN)
+  NS_BIN   path to northstar binary (default: $BIN)
   NS_BASE  baseline dir                (default: $BASE)
 EOF
 }

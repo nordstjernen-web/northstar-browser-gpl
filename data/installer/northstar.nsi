@@ -1,5 +1,5 @@
-; Nordstjernen Windows installer (NSIS Modern UI).
-; Per-user install — no elevation required — to %LOCALAPPDATA%\Programs\Nordstjernen.
+; Northstar Windows installer (NSIS Modern UI).
+; Per-user install — no elevation required — to %LOCALAPPDATA%\Programs\Northstar.
 ; Invoked by scripts/pack-windows-installer.sh, which passes VERSION/SRCDIR/OUTFILE.
 
 Unicode true
@@ -12,26 +12,26 @@ SetCompressor /SOLID lzma
   !define VERSION "0.0.0"
 !endif
 !ifndef SRCDIR
-  !define SRCDIR "..\..\dist\nordstjernen-win64"
+  !define SRCDIR "..\..\dist\northstar-win64"
 !endif
 !ifndef OUTFILE
-  !define OUTFILE "..\..\dist\nordstjernen-${VERSION}-win64-setup.exe"
+  !define OUTFILE "..\..\dist\northstar-${VERSION}-win64-setup.exe"
 !endif
 
-!define APP_NAME "Nordstjernen"
-!define APP_DISPLAY "Nordstjernen Web Navigator"
+!define APP_NAME "Northstar"
+!define APP_DISPLAY "Northstar Web Navigator"
 !define APP_PUBLISHER "Andreas Rosdal"
 !define APP_URL "https://nordstjernen.org"
-!define APP_REGKEY "Software\Nordstjernen"
-!define APP_ARPKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\Nordstjernen"
-!define APP_SMIKEY "Software\Clients\StartMenuInternet\Nordstjernen"
-!define APP_PROGID "NordstjernenHTML"
+!define APP_REGKEY "Software\Northstar"
+!define APP_ARPKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\Northstar"
+!define APP_SMIKEY "Software\Clients\StartMenuInternet\Northstar"
+!define APP_PROGID "NorthstarHTML"
 !define APP_CLASSKEY "Software\Classes\${APP_PROGID}"
 
 Name "${APP_NAME} ${VERSION}"
 OutFile "${OUTFILE}"
 RequestExecutionLevel user
-InstallDir "$LOCALAPPDATA\Programs\Nordstjernen"
+InstallDir "$LOCALAPPDATA\Programs\Northstar"
 InstallDirRegKey HKCU "${APP_REGKEY}" "InstallDir"
 ShowInstDetails show
 ShowUnInstDetails show
@@ -49,11 +49,11 @@ VIAddVersionKey "FileDescription" "${APP_DISPLAY} installer"
 !define MUI_ICON   "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
 !define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
 
-!define MUI_FINISHPAGE_RUN "$INSTDIR\nordstjernen.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "Run Nordstjernen now"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\northstar.exe"
+!define MUI_FINISHPAGE_RUN_TEXT "Run Northstar now"
 !define MUI_FINISHPAGE_SHOWREADME ""
 !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
-!define MUI_FINISHPAGE_SHOWREADME_TEXT "Set Nordstjernen as my default browser"
+!define MUI_FINISHPAGE_SHOWREADME_TEXT "Set Northstar as my default browser"
 !define MUI_FINISHPAGE_SHOWREADME_FUNCTION OpenDefaultAppsSettings
 !define MUI_FINISHPAGE_LINK "Visit nordstjernen.org"
 !define MUI_FINISHPAGE_LINK_LOCATION "${APP_URL}"
@@ -68,15 +68,15 @@ VIAddVersionKey "FileDescription" "${APP_DISPLAY} installer"
 
 !insertmacro MUI_LANGUAGE "English"
 
-Section "Nordstjernen (required)" SecMain
+Section "Northstar (required)" SecMain
   SectionIn RO
   SetOutPath "$INSTDIR"
   File /r "${SRCDIR}\*"
 
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" \
-                 "$INSTDIR\nordstjernen.exe" "" \
-                 "$INSTDIR\nordstjernen.exe" 0 \
+                 "$INSTDIR\northstar.exe" "" \
+                 "$INSTDIR\northstar.exe" 0 \
                  SW_SHOWNORMAL "" "${APP_DISPLAY}"
   CreateShortCut "$SMPROGRAMS\${APP_NAME}\Uninstall ${APP_NAME}.lnk" \
                  "$INSTDIR\uninstall.exe"
@@ -88,7 +88,7 @@ Section "Nordstjernen (required)" SecMain
   WriteRegStr   HKCU "${APP_ARPKEY}" "DisplayVersion"       "${VERSION}"
   WriteRegStr   HKCU "${APP_ARPKEY}" "Publisher"            "${APP_PUBLISHER}"
   WriteRegStr   HKCU "${APP_ARPKEY}" "URLInfoAbout"         "${APP_URL}"
-  WriteRegStr   HKCU "${APP_ARPKEY}" "DisplayIcon"          "$INSTDIR\nordstjernen.exe,0"
+  WriteRegStr   HKCU "${APP_ARPKEY}" "DisplayIcon"          "$INSTDIR\northstar.exe,0"
   WriteRegStr   HKCU "${APP_ARPKEY}" "InstallLocation"      "$INSTDIR"
   WriteRegStr   HKCU "${APP_ARPKEY}" "UninstallString"      '"$INSTDIR\uninstall.exe"'
   WriteRegStr   HKCU "${APP_ARPKEY}" "QuietUninstallString" '"$INSTDIR\uninstall.exe" /S'
@@ -99,12 +99,12 @@ Section "Nordstjernen (required)" SecMain
   WriteRegDWORD HKCU "${APP_ARPKEY}" "EstimatedSize" "$0"
 
   WriteRegStr HKCU "${APP_SMIKEY}"                       "" "${APP_DISPLAY}"
-  WriteRegStr HKCU "${APP_SMIKEY}\DefaultIcon"           "" "$INSTDIR\nordstjernen.exe,0"
-  WriteRegStr HKCU "${APP_SMIKEY}\shell\open\command"    "" '"$INSTDIR\nordstjernen.exe"'
+  WriteRegStr HKCU "${APP_SMIKEY}\DefaultIcon"           "" "$INSTDIR\northstar.exe,0"
+  WriteRegStr HKCU "${APP_SMIKEY}\shell\open\command"    "" '"$INSTDIR\northstar.exe"'
 
   WriteRegStr HKCU "${APP_SMIKEY}\Capabilities" "ApplicationName"        "${APP_NAME}"
   WriteRegStr HKCU "${APP_SMIKEY}\Capabilities" "ApplicationDescription" "${APP_DISPLAY}"
-  WriteRegStr HKCU "${APP_SMIKEY}\Capabilities" "ApplicationIcon"        "$INSTDIR\nordstjernen.exe,0"
+  WriteRegStr HKCU "${APP_SMIKEY}\Capabilities" "ApplicationIcon"        "$INSTDIR\northstar.exe,0"
 
   WriteRegStr HKCU "${APP_SMIKEY}\Capabilities\FileAssociations" ".htm"  "${APP_PROGID}"
   WriteRegStr HKCU "${APP_SMIKEY}\Capabilities\FileAssociations" ".html" "${APP_PROGID}"
@@ -114,9 +114,9 @@ Section "Nordstjernen (required)" SecMain
   WriteRegStr HKCU "${APP_SMIKEY}\Capabilities\URLAssociations"  "https" "${APP_PROGID}"
   WriteRegStr HKCU "${APP_SMIKEY}\Capabilities\StartMenu" "StartMenuInternet" "${APP_NAME}"
 
-  WriteRegStr HKCU "${APP_CLASSKEY}"                    "" "Nordstjernen HTML Document"
-  WriteRegStr HKCU "${APP_CLASSKEY}\DefaultIcon"        "" "$INSTDIR\nordstjernen.exe,0"
-  WriteRegStr HKCU "${APP_CLASSKEY}\shell\open\command" "" '"$INSTDIR\nordstjernen.exe" "%1"'
+  WriteRegStr HKCU "${APP_CLASSKEY}"                    "" "Northstar HTML Document"
+  WriteRegStr HKCU "${APP_CLASSKEY}\DefaultIcon"        "" "$INSTDIR\northstar.exe,0"
+  WriteRegStr HKCU "${APP_CLASSKEY}\shell\open\command" "" '"$INSTDIR\northstar.exe" "%1"'
 
   WriteRegStr HKCU "Software\RegisteredApplications" "${APP_NAME}" "${APP_SMIKEY}\Capabilities"
 
@@ -129,8 +129,8 @@ FunctionEnd
 
 Section "Desktop shortcut" SecDesktop
   CreateShortCut "$DESKTOP\${APP_NAME}.lnk" \
-                 "$INSTDIR\nordstjernen.exe" "" \
-                 "$INSTDIR\nordstjernen.exe" 0 \
+                 "$INSTDIR\northstar.exe" "" \
+                 "$INSTDIR\northstar.exe" 0 \
                  SW_SHOWNORMAL "" "${APP_DISPLAY}"
 SectionEnd
 

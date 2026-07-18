@@ -1,4 +1,4 @@
-/* Nordstjernen — civil-date math and HTML date/time string parsing.
+/* Northstar — civil-date math and HTML date/time string parsing.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

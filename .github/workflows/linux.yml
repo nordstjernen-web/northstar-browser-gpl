@@ -90,16 +90,16 @@ jobs:
 
       - name: Smoke test (binary present and executable)
         run: |
-          test -x builddir/src/gtk/nordstjernen
-          file builddir/src/gtk/nordstjernen
-          ldd builddir/src/gtk/nordstjernen | head -20
+          test -x builddir/src/gtk/northstar
+          file builddir/src/gtk/northstar
+          ldd builddir/src/gtk/northstar | head -20
 
       - name: Headless smoke (about:start)
         run: |
           set -o pipefail
-          ./builddir/src/gtk/nordstjernen --headless --dump=text about:start > about.txt
+          ./builddir/src/gtk/northstar --headless --dump=text about:start > about.txt
           head -3 about.txt
-          grep -q Nordstjernen about.txt
+          grep -q Northstar about.txt
 
       - name: Headless baseline smoke (./scripts/dev.sh smoke)
         run: ./scripts/dev.sh smoke
@@ -114,10 +114,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Upload nordstjernen binary
+      - name: Upload northstar binary
         uses: actions/upload-artifact@v7
         with:
-          name: nordstjernen-linux-${{ matrix.ubuntu }}-gcc
-          path: builddir/src/gtk/nordstjernen
+          name: northstar-linux-${{ matrix.ubuntu }}-gcc
+          path: builddir/src/gtk/northstar
           if-no-files-found: error
           retention-days: 14

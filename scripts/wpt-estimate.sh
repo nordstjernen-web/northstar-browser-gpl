@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nordstjernen whole-suite WPT score estimator.
+# Northstar whole-suite WPT score estimator.
 #
 # Estimates the total number of passing testharness.js subtests across the
 # entire web-platform-tests suite — the scale on which full browsers score
@@ -16,11 +16,11 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BIN=${NS_BIN:-$ROOT/builddir/src/gtk/nordstjernen}
+BIN=${NS_BIN:-$ROOT/builddir/src/gtk/northstar}
 export NS_ALLOW_ROOT=${NS_ALLOW_ROOT:-1}
 WPT_ROOT=${NS_WPT_ROOT:-}
 SAMPLE=250
-SEED=nordstjernen
+SEED=northstar
 BASE="http://web-platform.test:8000"
 HTTPS_BASE="https://web-platform.test:8443"
 

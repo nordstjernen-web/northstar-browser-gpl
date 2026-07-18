@@ -1,13 +1,13 @@
 # Third-party software notices
 
-Nordstjernen links to (and in some cases statically includes) the
+Northstar links to (and in some cases statically includes) the
 following open-source libraries. Their copyright notices and license
 texts are reproduced below. For libraries shipped dynamically in the
 release bundles, you are entitled by the LGPL terms to replace them
 with modified versions; the binary will continue to function with any
 ABI-compatible replacement.
 
-The Nordstjernen source code itself is licensed under the GNU General
+The Northstar source code itself is licensed under the GNU General
 Public License, version 3 or later; see `LICENSE`.
 
 ---
@@ -275,8 +275,8 @@ license text is available at:
 
   <https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html>
 
-Per LGPL section 6, since Nordstjernen links to these libraries
-dynamically, you are entitled to modify them and re-link Nordstjernen
+Per LGPL section 6, since Northstar links to these libraries
+dynamically, you are entitled to modify them and re-link Northstar
 against the modified copies. On Windows / macOS bundles the libraries
 are shipped alongside the executable as ordinary DLLs / dylibs that you
 can replace; on Linux distributions they are loaded from the system
@@ -289,7 +289,7 @@ package manager.
 >
 > Copyright the FFmpeg developers.
 
-Only present when Nordstjernen was built with WebM support. The Windows
+Only present when Northstar was built with WebM support. The Windows
 release bundles MSYS2's `mingw-w64-x86_64-ffmpeg`, a GPL build of
 FFmpeg; the enabled VP8/VP9/Opus/Vorbis decoders are FFmpeg's own
 implementations. FFmpeg's licensing terms are documented at:
@@ -344,10 +344,10 @@ These are linked only when present on the build host (meson
 
 ## AI models
 
-Nordstjernen does **not** bundle any AI model. The optional local AI
+Northstar does **not** bundle any AI model. The optional local AI
 assistant lets you download a model of your choice at runtime; the model
 weights are fetched from Hugging Face and stored in your profile, never
-shipped with Nordstjernen. The models offered are licensed by their
+shipped with Northstar. The models offered are licensed by their
 respective creators as follows, and your use of a downloaded model is
 governed by that model's license:
 

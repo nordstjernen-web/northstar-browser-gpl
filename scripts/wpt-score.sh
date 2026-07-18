@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nordstjernen WPT score generator.
+# Northstar WPT score generator.
 #
 # Runs all of the fixed web-platform-tests slice tracked in
 # docs/wpt-scores.md, or just the given parts of it, through

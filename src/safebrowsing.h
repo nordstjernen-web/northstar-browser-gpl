@@ -1,4 +1,4 @@
-/* Nordstjernen — local phishing/malware blocklist and warning interstitial.
+/* Northstar — local phishing/malware blocklist and warning interstitial.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -10,7 +10,7 @@
 
 G_BEGIN_DECLS
 
-#define NS_UNSAFE_CONTINUE_SCHEME "nordstjernen-unsafe-continue:"
+#define NS_UNSAFE_CONTINUE_SCHEME "northstar-unsafe-continue:"
 
 gboolean ns_safebrowsing_blocked(const char *host);
 void     ns_safebrowsing_allow_host(const char *host);

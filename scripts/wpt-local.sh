@@ -7,13 +7,13 @@
 #
 # Usage: wpt-local.sh <test-path-relative-to-wpt-root> ...
 #   NS_WPT_ROOT  WPT checkout (default: $HOME/wpt)
-#   NS_BIN       browser binary (default: builddir/src/gtk/nordstjernen)
+#   NS_BIN       browser binary (default: builddir/src/gtk/northstar)
 #   NS_WPT_PORT  static server port (default: 8000)
 set -u
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 WPT=${NS_WPT_ROOT:-$HOME/wpt}
-BIN=${NS_BIN:-$ROOT/builddir/src/gtk/nordstjernen}
+BIN=${NS_BIN:-$ROOT/builddir/src/gtk/northstar}
 PORT=${NS_WPT_PORT:-8000}
 BASE="http://127.0.0.1:$PORT"
 export NS_ALLOW_ROOT=${NS_ALLOW_ROOT:-1}

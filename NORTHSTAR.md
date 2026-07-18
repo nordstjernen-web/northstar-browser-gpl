@@ -1,4 +1,4 @@
-# Nordstjernen — Development Plan
+# Northstar — Development Plan
 
 Living plan for a web browser written from scratch in **C**,
 small enough for one person to audit end-to-end. The engine and all
@@ -60,7 +60,7 @@ and constraint validation; `overflow` boxes scroll. The full
 (`src/wasm.c`), and an opt-in, per-site-gated WebGL 1 / 2 maps onto
 OpenGL ES (`src/webgl.c`). Painting skips off-screen boxes (viewport
 culling). Runs on Linux, Windows (MSYS2) and macOS, with an Android
-port [published on Google Play](https://play.google.com/store/apps/details?id=org.nordstjernen.WebBrowser);
+port [published on Google Play](https://play.google.com/store/apps/details?id=org.northstar.WebBrowser);
 CI builds the desktop three plus musl and
 the Java binding on every push (the BSDs run nightly / on dispatch).
 The GTK frontend is a tabbed, **process-per-tab** browser:
@@ -86,28 +86,28 @@ toolkit-agnostic:
   plus frontend-agnostic `ns_` helpers shared by alternative GUIs
   (the `ns_net_fetch_*` networking calls, the `ns_url_*` URL helpers,
   the `src/headless.c` driver, and the `ns_browser` embedding API in
-  `src/libnordstjernen.h`). New shared logic
+  `src/libnorthstar.h`). New shared logic
   lands here in C, in the house style (`ns_` snake_case, one-line SPDX
   header, no comments).
 - **`src/gtk/` — GTK 4 frontend.** A thin process-per-tab
   shell (`appmain` entry point, `procwindow`/`procview` over `rproc_http`)
-  that spawns one sandboxed `nordstjernen-renderer` process per tab and
+  that spawns one sandboxed `northstar-renderer` process per tab and
   blits its framebuffer. It carries the browser chrome — navigation,
   tabs, history, zoom, selection, `:hover`, find-in-page, a context menu,
   the DevTools console, save/export, the media helper plumbing, an app
   menu, settings, and bookmarks. The former in-process engine renderer
   has been removed.
 - **`java/` — Java / JVM binding and Swing app.** A Java library
-  (`org.nordstjernen.Nordstjernen`, JDK 21) embeds the engine on the JVM
+  (`org.northstar.Northstar`, JDK 21) embeds the engine on the JVM
   through a thin JNI bridge over the C embedding API
-  (`src/libnordstjernen.h`), with a no-JNI `RemotePage`/`RemoteBrowser`
-  client that drives a separate `nordstjernen-renderer` process over the
-  renderer's HTTP/JSON protocol. `org.nordstjernen.app.Browser` is a
+  (`src/libnorthstar.h`), with a no-JNI `RemotePage`/`RemoteBrowser`
+  client that drives a separate `northstar-renderer` process over the
+  renderer's HTTP/JSON protocol. `org.northstar.app.Browser` is a
   standalone Swing browser app built on that client with GTK-shell-style
   chrome. See `java/README.md`.
 - **`android/` — Android port (on Google Play).** A Kotlin shell
   (`MainActivity`, `PageView`, `NativeBrowser`) over the same engine via
-  JNI, [published on the Play Store](https://play.google.com/store/apps/details?id=org.nordstjernen.WebBrowser);
+  JNI, [published on the Play Store](https://play.google.com/store/apps/details?id=org.northstar.WebBrowser);
   see `docs/Android.md`.
 
 **Process-per-tab renderer boundary — shipped.** Each tab runs in its own
@@ -118,7 +118,7 @@ protocol (render/viewport, click/key/hover/select, find, export, media,
 console/eval). This is the payoff that makes the design cohere: the GTK
 shell is a thin display-plus-input layer showing the engine's output
 (so it needs no separate renderer), and isolation is
-real — `nordstjernen-renderer` applies the same Landlock + seccomp
+real — `northstar-renderer` applies the same Landlock + seccomp
 confinement as the engine at startup (`ns_browser_sandbox`, called right
 after `ns_browser_init` and before any page
 is opened), so a renderer crash is a per-tab failure and untrusted content
@@ -156,7 +156,7 @@ seccomp skipped. The mechanics live in `docs/tab-isolation.md`.
   (full repaint × ~15 ease-frames saturated CPU). Both need dirty rects.
 - **14 · YouTube watch-page playback** — baseline shipped: a streaming
   `<video>` (MSE/`blob:`, no file URL) plays *inline* — the renderer
-  materializes the growing stream and the `nordstjernen-video` helper
+  materializes the growing stream and the `northstar-video` helper
   (`src/videoproc/main.c`, built when libav is present) decodes frames
   into a shm ring the shell composites over the page (see
   `docs/media.md`). Next: widen codec/site coverage and surface clearer
@@ -215,7 +215,7 @@ committed, listed to keep the long view in one place:
 shared-memory-framebuffer boundary (the GTK shell is a thin display
 client now; the legacy bespoke in-process renderer removed — see
 *Architecture & frontends* and `docs/tab-isolation.md`),
-10 embeddable `libnordstjernen` (built and header-installed
+10 embeddable `libnorthstar` (built and header-installed
 from meson, see `docs/Embedding.md`; Java JNI binding and Swing app in
 `java/`, see `java/README.md`),
 15 Debian/Ubuntu `.deb` packaging (built nightly, see `docs/Nightly.md`).

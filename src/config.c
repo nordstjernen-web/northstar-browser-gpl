@@ -1,4 +1,4 @@
-/* Nordstjernen — flat key/value config loader.
+/* Northstar — flat key/value config loader.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -281,7 +281,7 @@ ns_config_init(void)
         return;
     apply_default(&g_cfg);
     g_cfg_path = g_build_filename(g_get_user_config_dir(),
-                                  NS_APP_DIR_NAME, "nordstjernen.conf",
+                                  NS_APP_DIR_NAME, "northstar.conf",
                                   NULL);
     load_file(&g_cfg, g_cfg_path);
     apply_env(&g_cfg);
@@ -407,7 +407,7 @@ ns_config_save(GError **error)
 
     const ns_config *c = &g_cfg;
     GString *s = g_string_new(NULL);
-    g_string_append(s, "# nordstjernen configuration\n");
+    g_string_append(s, "# northstar configuration\n");
     for (gsize i = 0; i < G_N_ELEMENTS(cfg_fields); i++) {
         const cfg_field *f = &cfg_fields[i];
         const void *slot = (const char *)c + f->offset;
@@ -454,7 +454,7 @@ ns_config_dump(void)
 {
     const ns_config *c = &g_cfg;
     GString *s = g_string_new(NULL);
-    g_string_append_printf(s, "# nordstjernen effective config\n");
+    g_string_append_printf(s, "# northstar effective config\n");
     g_string_append_printf(s, "# file: %s\n", g_cfg_path ? g_cfg_path : "(none)");
     g_string_append_printf(s, "home_url              = %s\n", c->home_url);
     g_string_append_printf(s, "user_agent            = %s\n", c->user_agent);

@@ -42,12 +42,12 @@
   </Capabilities>
 
   <Applications>
-    <Application Id="Nordstjernen"
-                 Executable="nordstjernen.exe"
+    <Application Id="Northstar"
+                 Executable="northstar.exe"
                  EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
           DisplayName="@DISPLAY_NAME@"
-          Description="Nordstjernen Web Browser — a minimalist, secure web browser with its own clean-room engine."
+          Description="Northstar Web Browser — a minimalist, secure web browser with its own clean-room engine."
           BackgroundColor="transparent"
           Square150x150Logo="Assets\Square150x150Logo.png"
           Square44x44Logo="Assets\Square44x44Logo.png">
@@ -80,10 +80,10 @@
           </uap:FileTypeAssociation>
         </uap:Extension>
         <uap3:Extension Category="windows.appExecutionAlias"
-                        Executable="nordstjernen.exe"
+                        Executable="northstar.exe"
                         EntryPoint="Windows.FullTrustApplication">
           <uap3:AppExecutionAlias>
-            <desktop:ExecutionAlias Alias="nordstjernen.exe"/>
+            <desktop:ExecutionAlias Alias="northstar.exe"/>
           </uap3:AppExecutionAlias>
         </uap3:Extension>
       </Extensions>

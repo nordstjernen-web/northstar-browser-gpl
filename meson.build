@@ -1,5 +1,5 @@
 project(
-  'nordstjernen',
+  'northstar',
   ['c', 'cpp'],
   version: '1.0.0',
   license: 'GPL-3.0-or-later',
@@ -75,7 +75,7 @@ add_project_link_arguments(
 ns_buildtype = get_option('buildtype')
 ns_is_release = (ns_buildtype == 'release' or ns_buildtype == 'minsize')
 # Every build profile gets -O3 (via default_options optimization=3) plus
-# dead-section pruning. Nordstjernen leans on the optimizer to inline the
+# dead-section pruning. Northstar leans on the optimizer to inline the
 # lexbor parser walks, QuickJS interpreter dispatch, and our box-layout
 # loops; -O2 left ~30% on the table for JS-heavy pages. The -O level is
 # left to meson's optimization option so it isn't passed twice (which
@@ -100,7 +100,7 @@ else
     language: 'c',
   )
 endif
-message('nordstjernen build profile: ' +
+message('northstar build profile: ' +
         (ns_is_release ? 'release (LTO + stripped + hardened)'
                        : 'development (debug symbols + frame pointer + hardened)'))
 
@@ -131,7 +131,7 @@ if not is_mobile and gtk_feature.allowed()
     elif gtk4.version().version_compare('>=4.22')
       message('GTK @0@ — preferred (>= 4.22).'.format(gtk4.version()))
     else
-      warning('GTK @0@ meets the 4.14 minimum, but Nordstjernen prefers >= 4.22 for the newer GSK renderers.'.format(gtk4.version()))
+      warning('GTK @0@ meets the 4.14 minimum, but Northstar prefers >= 4.22 for the newer GSK renderers.'.format(gtk4.version()))
     endif
   endif
 endif
@@ -199,7 +199,7 @@ if libopusfile.found()
   add_project_arguments('-DNS_HAVE_OPUSFILE=1', language: 'c')
 endif
 # canPlayType/mediaCapabilities may honestly advertise native Ogg audio only
-# where the decoder that plays it is built: the desktop (SDL2) nordstjernen-audio
+# where the decoder that plays it is built: the desktop (SDL2) northstar-audio
 # helper. On mobile audio takes a different path, so these are gated off there.
 if not is_mobile and get_option('audio').allowed()
   sdl2_probe = dependency('sdl2', required: false)
@@ -274,36 +274,36 @@ else
 endif
 
 install_data(
-  'data/icons/hicolor/scalable/apps/nordstjernen.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen.gif',
-  'data/icons/hicolor/scalable/apps/nordstjernen-back.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-forward.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-home.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-reload.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-stop.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-go.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-bookmarks.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-console.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-settings.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-about.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-stage-connect.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-stage-fetch.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-stage-parse.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-stage-script.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-stage-render.svg',
-  'data/icons/hicolor/scalable/apps/nordstjernen-stage-done.svg',
+  'data/icons/hicolor/scalable/apps/northstar.svg',
+  'data/icons/hicolor/scalable/apps/northstar.gif',
+  'data/icons/hicolor/scalable/apps/northstar-back.svg',
+  'data/icons/hicolor/scalable/apps/northstar-forward.svg',
+  'data/icons/hicolor/scalable/apps/northstar-home.svg',
+  'data/icons/hicolor/scalable/apps/northstar-reload.svg',
+  'data/icons/hicolor/scalable/apps/northstar-stop.svg',
+  'data/icons/hicolor/scalable/apps/northstar-go.svg',
+  'data/icons/hicolor/scalable/apps/northstar-bookmarks.svg',
+  'data/icons/hicolor/scalable/apps/northstar-console.svg',
+  'data/icons/hicolor/scalable/apps/northstar-settings.svg',
+  'data/icons/hicolor/scalable/apps/northstar-about.svg',
+  'data/icons/hicolor/scalable/apps/northstar-stage-connect.svg',
+  'data/icons/hicolor/scalable/apps/northstar-stage-fetch.svg',
+  'data/icons/hicolor/scalable/apps/northstar-stage-parse.svg',
+  'data/icons/hicolor/scalable/apps/northstar-stage-script.svg',
+  'data/icons/hicolor/scalable/apps/northstar-stage-render.svg',
+  'data/icons/hicolor/scalable/apps/northstar-stage-done.svg',
   install_dir: get_option('datadir') / 'icons' / 'hicolor' / 'scalable' / 'apps',
 )
 
 install_data(
   'LICENSE',
   'THIRD-PARTY-LICENSES.md',
-  install_dir: get_option('datadir') / 'nordstjernen',
+  install_dir: get_option('datadir') / 'northstar',
 )
 
 install_data(
   'data/safebrowsing.list',
-  install_dir: get_option('datadir') / 'nordstjernen',
+  install_dir: get_option('datadir') / 'northstar',
 )
 
 install_data(
@@ -347,17 +347,17 @@ install_data(
   'data/i18n/vi.lang',
   'data/i18n/yo.lang',
   'data/i18n/zh.lang',
-  install_dir: get_option('datadir') / 'nordstjernen' / 'i18n',
+  install_dir: get_option('datadir') / 'northstar' / 'i18n',
 )
 
 install_data(
-  'data/nordstjernen.desktop',
+  'data/northstar.desktop',
   install_dir: get_option('datadir') / 'applications',
-  rename: 'org.nordstjernen.WebBrowser.desktop',
+  rename: 'org.northstar.WebBrowser.desktop',
 )
 
 install_data(
-  'data/org.nordstjernen.WebBrowser.metainfo.xml',
+  'data/org.northstar.WebBrowser.metainfo.xml',
   install_dir: get_option('datadir') / 'metainfo',
 )
 

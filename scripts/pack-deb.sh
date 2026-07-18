@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a portable Nordstjernen .deb by repackaging the bundle that
+# Build a portable Northstar .deb by repackaging the bundle that
 # pack-linux.sh produces. The binary statically links the in-tree engine
 # (lexbor, quickjs, wuffs). Stable desktop deps (GTK, curl, rsvg, …) are
 # computed from the binary's SONAMEs with dpkg-shlibdeps, falling back to
@@ -13,7 +13,7 @@ VERSION=${VERSION:-$(grep -E "^[[:space:]]*version" "$ROOT/meson.build" | head -
           | sed -E "s/.*version: '([^']+)'.*/\1/")}
 DEBARCH=$(dpkg --print-architecture 2>/dev/null || echo amd64)
 ARCH=$(uname -m)
-SLUG="nordstjernen-${VERSION}-linux-${ARCH}"
+SLUG="northstar-${VERSION}-linux-${ARCH}"
 STAGE="$ROOT/dist/${SLUG}"
 
 if ! command -v dpkg-deb >/dev/null 2>&1; then
@@ -22,7 +22,7 @@ if ! command -v dpkg-deb >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ ! -x "$STAGE/nordstjernen" ]; then
+if [ ! -x "$STAGE/northstar" ]; then
     echo "Bundle not staged yet — running pack-linux.sh first."
     "$ROOT/scripts/pack-linux.sh"
 fi
@@ -33,35 +33,35 @@ install -dm755 "$PKGROOT/DEBIAN"
 install -dm755 "$PKGROOT/usr/bin"
 install -dm755 "$PKGROOT/usr/share/icons/hicolor/scalable/apps"
 install -dm755 "$PKGROOT/usr/share/applications"
-install -dm755 "$PKGROOT/usr/share/nordstjernen"
-install -dm755 "$PKGROOT/usr/share/doc/nordstjernen"
+install -dm755 "$PKGROOT/usr/share/northstar"
+install -dm755 "$PKGROOT/usr/share/doc/northstar"
 
-install -m755 "$STAGE/nordstjernen" "$PKGROOT/usr/bin/nordstjernen"
-install -m755 "$STAGE/nordstjernen-renderer" "$PKGROOT/usr/bin/nordstjernen-renderer"
+install -m755 "$STAGE/northstar" "$PKGROOT/usr/bin/northstar"
+install -m755 "$STAGE/northstar-renderer" "$PKGROOT/usr/bin/northstar-renderer"
 # Audio playback helper, when SDL2 was available at build time. It is added to
 # the dpkg-shlibdeps scan below so its libSDL2 dependency lands in Depends.
-if [ -x "$STAGE/nordstjernen-audio" ]; then
-    install -m755 "$STAGE/nordstjernen-audio" "$PKGROOT/usr/bin/nordstjernen-audio"
+if [ -x "$STAGE/northstar-audio" ]; then
+    install -m755 "$STAGE/northstar-audio" "$PKGROOT/usr/bin/northstar-audio"
 fi
 # All app + toolbar icons the UI and about: pages look up by name.
-for icon in "$ROOT"/data/icons/hicolor/scalable/apps/nordstjernen*.svg \
-            "$ROOT"/data/icons/hicolor/scalable/apps/nordstjernen.gif; do
+for icon in "$ROOT"/data/icons/hicolor/scalable/apps/northstar*.svg \
+            "$ROOT"/data/icons/hicolor/scalable/apps/northstar.gif; do
     [ -e "$icon" ] && install -m644 "$icon" \
         "$PKGROOT/usr/share/icons/hicolor/scalable/apps/"
 done
 # Desktop file named for the GTK app-id so Wayland matches the window to it
 # (otherwise the taskbar/dock icon is blank).
-install -m644 "$ROOT/data/nordstjernen.desktop" \
-    "$PKGROOT/usr/share/applications/org.nordstjernen.WebBrowser.desktop"
-# about:license reads this at ../share/nordstjernen/LICENSE relative to the
-# binary (/usr/bin -> /usr/share/nordstjernen).
-install -m644 "$ROOT/LICENSE" "$PKGROOT/usr/share/nordstjernen/LICENSE"
-install -m644 "$ROOT/README.md" "$PKGROOT/usr/share/doc/nordstjernen/"
-install -m644 "$ROOT/THIRD-PARTY-LICENSES.md" "$PKGROOT/usr/share/doc/nordstjernen/"
-install -m644 "$ROOT/LICENSE" "$PKGROOT/usr/share/doc/nordstjernen/copyright"
+install -m644 "$ROOT/data/northstar.desktop" \
+    "$PKGROOT/usr/share/applications/org.northstar.WebBrowser.desktop"
+# about:license reads this at ../share/northstar/LICENSE relative to the
+# binary (/usr/bin -> /usr/share/northstar).
+install -m644 "$ROOT/LICENSE" "$PKGROOT/usr/share/northstar/LICENSE"
+install -m644 "$ROOT/README.md" "$PKGROOT/usr/share/doc/northstar/"
+install -m644 "$ROOT/THIRD-PARTY-LICENSES.md" "$PKGROOT/usr/share/doc/northstar/"
+install -m644 "$ROOT/LICENSE" "$PKGROOT/usr/share/doc/northstar/copyright"
 
 # Bundle the volatile image-codec libraries (libavif and the AV1
-# codecs it pulls in) under /usr/lib/nordstjernen with an $ORIGIN rpath.
+# codecs it pulls in) under /usr/lib/northstar with an $ORIGIN rpath.
 # Their SONAMEs bump between Ubuntu/Debian releases and each release ships
 # only one version, so depending on them as system packages makes the .deb
 # installable on exactly one release. The stable desktop libs (GTK, curl,
@@ -72,7 +72,7 @@ install -m644 "$ROOT/LICENSE" "$PKGROOT/usr/share/doc/nordstjernen/copyright"
 # degrades to system deps instead of aborting the whole package build.
 set +e
 
-BUNDLE_DIR="$PKGROOT/usr/lib/nordstjernen"
+BUNDLE_DIR="$PKGROOT/usr/lib/northstar"
 # Seed libs the binary links directly whose SONAMEs bump per distro release.
 SEED_RE='libavif\.so'
 # Never bundle the C/C++/OpenMP runtime: universally present and ABI-stable,
@@ -97,8 +97,8 @@ if command -v patchelf >/dev/null 2>&1; then
     # BFS over the dependency closure of the seed codec libs, so every backend
     # libavif pulls in (gav1, aom, dav1d, rav1e, SvtAv1, yuv, sharpyuv, …)
     # is bundled too -- no per-name allow-list to keep in sync.
-    worklist=$( { ldd "$PKGROOT/usr/bin/nordstjernen" 2>/dev/null; \
-                  ldd "$PKGROOT/usr/bin/nordstjernen-renderer" 2>/dev/null; } \
+    worklist=$( { ldd "$PKGROOT/usr/bin/northstar" 2>/dev/null; \
+                  ldd "$PKGROOT/usr/bin/northstar-renderer" 2>/dev/null; } \
                  | grep -oE '/[^ ]+\.so[^ ]*' | grep -E "$SEED_RE")
     seen=""
     while [ -n "$worklist" ]; do
@@ -128,9 +128,9 @@ if command -v patchelf >/dev/null 2>&1; then
         # lives in the engine both share), so both need the bundle on their
         # rpath -- otherwise the renderer fails to start with
         # "libavif.so.NN: cannot open shared object file".
-        for bin in nordstjernen nordstjernen-renderer; do
+        for bin in northstar northstar-renderer; do
             [ -e "$PKGROOT/usr/bin/$bin" ] || continue
-            patchelf --set-rpath '$ORIGIN/../lib/nordstjernen' \
+            patchelf --set-rpath '$ORIGIN/../lib/northstar' \
                 "$PKGROOT/usr/bin/$bin" 2>/dev/null || rpath_ok=0
         done
         if [ "$rpath_ok" = 1 ]; then
@@ -152,16 +152,16 @@ RUNTIME_DEPS=""
 if command -v dpkg-shlibdeps >/dev/null 2>&1; then
     install -dm755 "$PKGROOT/debian"
     cat > "$PKGROOT/debian/control" <<CTL
-Source: nordstjernen
+Source: northstar
 
-Package: nordstjernen
+Package: northstar
 Architecture: any
 CTL
     # Scan the renderer too: it is the binary that actually decodes video, so
     # the FFmpeg libav* SONAMEs of an inline-WebM build land in Depends from
     # here (the GTK shell links them via the shared engine as well).
-    scan_bins=(usr/bin/nordstjernen usr/bin/nordstjernen-renderer)
-    [ -x "$PKGROOT/usr/bin/nordstjernen-audio" ] && scan_bins+=(usr/bin/nordstjernen-audio)
+    scan_bins=(usr/bin/northstar usr/bin/northstar-renderer)
+    [ -x "$PKGROOT/usr/bin/northstar-audio" ] && scan_bins+=(usr/bin/northstar-audio)
     RUNTIME_DEPS=$(cd "$PKGROOT" \
         && dpkg-shlibdeps -O --ignore-missing-info "${scan_bins[@]}" 2>/dev/null \
         | sed -n 's/^shlibs:Depends=//p')
@@ -185,7 +185,7 @@ if [ "$bundled_any" = 1 ] && [ -n "$RUNTIME_DEPS" ]; then
 fi
 
 cat > "$PKGROOT/DEBIAN/control" <<EOF
-Package: nordstjernen
+Package: northstar
 Version: ${VERSION}
 Architecture: ${DEBARCH}
 Maintainer: Andreas Røsdal <andreas.rosdal@gmail.com>
@@ -195,8 +195,8 @@ Recommends: mpv | vlc | celluloid | totem | mplayer
 Section: web
 Priority: optional
 Homepage: https://nordstjernen.org
-Description: Nordstjernen Web Navigator — a small, hand-written web browser
- Nordstjernen is a small, source-available web browser written in C with
+Description: Northstar Web Navigator — a small, hand-written web browser
+ Northstar is a small, source-available web browser written in C with
  GTK 4 and libcurl. The HTML parser, CSS engine, layout, paint and
  JavaScript glue are written from scratch — no third-party browser engine
  is used. SVG images are rendered with librsvg.
@@ -215,7 +215,7 @@ EOF
 cp "$PKGROOT/DEBIAN/postinst" "$PKGROOT/DEBIAN/postrm"
 chmod 755 "$PKGROOT/DEBIAN/postinst" "$PKGROOT/DEBIAN/postrm"
 
-DEB="$ROOT/dist/nordstjernen_${VERSION}_${DEBARCH}.deb"
+DEB="$ROOT/dist/northstar_${VERSION}_${DEBARCH}.deb"
 rm -f "$DEB"
 dpkg-deb --root-owner-group --build "$PKGROOT" "$DEB" >/dev/null
 

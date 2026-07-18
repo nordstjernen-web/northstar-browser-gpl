@@ -1,9 +1,9 @@
-/* Nordstjernen — public C embedding API implementation.
+/* Northstar — public C embedding API implementation.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "libnordstjernen.h"
+#include "libnorthstar.h"
 
 #include <cairo.h>
 #include <gio/gio.h>
@@ -260,7 +260,7 @@ browser_relayout_from_mutation(ns_browser *b)
         b->damp_until_us = now + NS_LAYOUT_DAMP_US;
         if (!b->damp_logged) {
             b->damp_logged = TRUE;
-            g_message("nordstjernen: layout dampener engaged "
+            g_message("northstar: layout dampener engaged "
                       "(script reflow loop with no user input)");
         }
     }
