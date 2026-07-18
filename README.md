@@ -82,7 +82,7 @@ browser engine (no Gecko, WebKit, or Blink). It is the GPL edition of the
 | Component | Role |
 |-----------|------|
 | [lexbor](https://github.com/lexbor/lexbor) v3.0.0 | HTML5 → DOM parser, CSS, and the WHATWG URL module |
-| [quickjs-ng](https://github.com/quickjs-ng/quickjs) v0.9.0 | JavaScript engine — no JIT |
+| [quickjs-ng](https://github.com/quickjs-ng/quickjs) v0.15.1 | JavaScript engine — no JIT |
 
 **Vendored in-tree** (built from the main tree, no submodules):
 
@@ -109,4 +109,6 @@ Project home: <https://nordstjernen.org> · Copyright 2026 Andreas Røsdal.
 
 ## Builds
 [![linux](https://github.com/nordstjernen-web/northstar-browser-gpl/actions/workflows/linux.yml/badge.svg?branch=main)](https://github.com/nordstjernen-web/northstar-browser-gpl/actions/workflows/linux.yml)
+[![musl](https://github.com/nordstjernen-web/northstar-browser-gpl/actions/workflows/musl.yml/badge.svg?branch=main)](https://github.com/nordstjernen-web/northstar-browser-gpl/actions/workflows/musl.yml)
+[![macos](https://github.com/nordstjernen-web/northstar-browser-gpl/actions/workflows/macos.yml/badge.svg?branch=main)](https://github.com/nordstjernen-web/northstar-browser-gpl/actions/workflows/macos.yml)
 [![windows](https://github.com/nordstjernen-web/northstar-browser-gpl/actions/workflows/windows.yml/badge.svg?branch=main)](https://github.com/nordstjernen-web/northstar-browser-gpl/actions/workflows/windows.yml)
