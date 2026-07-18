@@ -38035,7 +38035,7 @@ ns_js_emit(ns_js *js, const char *prefix, JSContext *ctx, int argc, JSValueConst
     for (int i = start; i < argc; i++) {
         if (i > start || start > 0 || (prefix && *prefix))
             g_string_append_c(out, ' ');
-        if (JS_IsError(ctx, argv[i])) {
+        if (JS_IsError(argv[i])) {
             JSValue name_v  = JS_GetPropertyStr(ctx, argv[i], "name");
             JSValue msg_v   = JS_GetPropertyStr(ctx, argv[i], "message");
             JSValue stack_v = JS_GetPropertyStr(ctx, argv[i], "stack");
@@ -38233,7 +38233,7 @@ ns_js_promise_rejection_tracker(JSContext *ctx, JSValueConst promise,
     ns_js *js = js_from_ctx(ctx);
     if (!js || !js->log_cb) return;
     GString *out = g_string_new("[unhandled rejection] ");
-    if (JS_IsError(ctx, reason) || (JS_IsObject(reason) && !JS_IsFunction(ctx, reason))) {
+    if (JS_IsError(reason) || (JS_IsObject(reason) && !JS_IsFunction(ctx, reason))) {
         ns_js_emit(js, out->str, ctx, 1, (JSValueConst[]){ reason });
         g_string_free(out, TRUE);
         return;
@@ -39797,7 +39797,52 @@ ns_install_tostringtag(JSContext *ctx, JSValueConst global)
 }
 
 static void
-ns_make_object_methods_native(JSContext *ctx, JSValueConst obj)
+ns_mark_native_function(JSContext *ctx, JSValueConst marker,
+                        JSValueConst function)
+{
+    if (!JS_IsFunction(ctx, function)) return;
+    JSValueConst args[] = { function };
+    JSValue result = JS_Call(ctx, marker, JS_UNDEFINED, 1, args);
+    if (JS_IsException(result))
+        JS_FreeValue(ctx, JS_GetException(ctx));
+    JS_FreeValue(ctx, result);
+}
+
+static JSValue
+ns_make_native_function_marker(JSContext *ctx)
+{
+    static const char source[] =
+        "(function(){"
+        " var original=Function.prototype.toString,apply=Reflect.apply;"
+        " var marked=new WeakSet();"
+        " function nativeSource(fn){"
+        "  var name=String(fn.name||'');"
+        "  if(name.slice(0,6)==='bound ')name='';"
+        "  return 'function '+name+'() { [native code] }';"
+        " }"
+        " function toString(){"
+        "  var source=apply(original,this,[]);"
+        "  return marked.has(this)||source.indexOf('[native code]')>=0"
+        "   ?nativeSource(this):source;"
+        " }"
+        " marked.add(toString);"
+        " Object.defineProperty(Function.prototype,'toString',{"
+        "  value:toString,writable:true,enumerable:false,configurable:true});"
+        " return function(fn){if(typeof fn==='function')marked.add(fn);};"
+        "})()";
+    JSValue marker = JS_Eval(ctx, source, sizeof(source) - 1,
+                             "<native-functions>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(marker)) {
+        JS_FreeValue(ctx, JS_GetException(ctx));
+        JS_FreeValue(ctx, marker);
+        return JS_UNDEFINED;
+    }
+    return marker;
+}
+
+static void
+ns_make_object_methods_native(JSContext *ctx, JSValueConst obj,
+                              JSValueConst marker)
 {
     if (!JS_IsObject(obj)) return;
     JSPropertyEnum *tab = NULL;
@@ -39808,9 +39853,9 @@ ns_make_object_methods_native(JSContext *ctx, JSValueConst obj)
     for (uint32_t i = 0; i < len; i++) {
         JSPropertyDescriptor d;
         if (JS_GetOwnProperty(ctx, &d, obj, tab[i].atom) > 0) {
-            JS_MarkFunctionNative(ctx, d.value);
-            JS_MarkFunctionNative(ctx, d.getter);
-            JS_MarkFunctionNative(ctx, d.setter);
+            ns_mark_native_function(ctx, marker, d.value);
+            ns_mark_native_function(ctx, marker, d.getter);
+            ns_mark_native_function(ctx, marker, d.setter);
             if (JS_IsFunction(ctx, d.value)) {
                 JSValue nm = JS_GetPropertyStr(ctx, d.value, "name");
                 const char *cur = JS_ToCString(ctx, nm);
@@ -39836,6 +39881,11 @@ ns_make_object_methods_native(JSContext *ctx, JSValueConst obj)
 static void
 ns_make_dom_methods_native(JSContext *ctx, JSValueConst global)
 {
+    JSValue marker = ns_make_native_function_marker(ctx);
+    if (!JS_IsFunction(ctx, marker)) {
+        JS_FreeValue(ctx, marker);
+        return;
+    }
     static const char *const ifaces[] = {
         "EventTarget", "Node", "Element", "HTMLElement", "SVGElement",
         "CharacterData", "Text", "Comment", "Document", "HTMLDocument",
@@ -39852,14 +39902,15 @@ ns_make_dom_methods_native(JSContext *ctx, JSValueConst global)
     for (gsize i = 0; i < G_N_ELEMENTS(ifaces); i++) {
         JSValue ctor = JS_GetPropertyStr(ctx, global, ifaces[i]);
         if (JS_IsObject(ctor)) {
-            ns_make_object_methods_native(ctx, ctor);
+            ns_make_object_methods_native(ctx, ctor, marker);
             JSValue proto = JS_GetPropertyStr(ctx, ctor, "prototype");
-            ns_make_object_methods_native(ctx, proto);
+            ns_make_object_methods_native(ctx, proto, marker);
             JS_FreeValue(ctx, proto);
         }
         JS_FreeValue(ctx, ctor);
     }
-    ns_make_object_methods_native(ctx, global);
+    ns_make_object_methods_native(ctx, global, marker);
+    JS_FreeValue(ctx, marker);
 }
 
 static void

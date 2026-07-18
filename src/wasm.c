@@ -1426,13 +1426,13 @@ ns_wasm_bind_imports(JSContext *ctx, wasm_module_t module,
                         wasm_runtime_link_import_global(module, i, &gval);
                     break;
                 }
-                if (JS_IsNumber(v) || JS_IsBigInt(ctx, v)) {
+                if (JS_IsNumber(v) || JS_IsBigInt(v)) {
                     wasm_val_t val;
                     memset(&val, 0, sizeof(val));
                     val.kind =
                         wasm_global_type_get_valkind(imp.u.global_type);
                     gboolean ok = TRUE;
-                    if (val.kind == WASM_I64 && JS_IsBigInt(ctx, v)) {
+                    if (val.kind == WASM_I64 && JS_IsBigInt(v)) {
                         ok = !JS_ToBigInt64(ctx, &val.of.i64, v);
                     } else {
                         double d = 0;
