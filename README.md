@@ -19,13 +19,7 @@ end-to-end.
 ## What this edition is
 
 This edition strips Nordstjernen down to a single-window, single-page,
-single-process desktop browser. Compared with the full
-[Nordstjernen project](https://github.com/nordstjernen-web/nordstjernen)
-it **removes**: tabs and the process-per-tab architecture (the engine now
-always runs in the shell process), WebGL and WebGPU, inline video and
-the video helper process, the inline PDF viewer, WebP image decoding,
-and the Android, Java, macOS and iOS builds and the embeddable-library
-API.
+single-process desktop browser. [Nordstjernen project](https://github.com/nordstjernen-web/nordstjernen)
 
 Audio still plays (MP3, MP2, Ogg Opus/Vorbis via the `nordstjernen-audio`
 helper), images still decode (PNG/GIF/BMP/JPEG via Wuffs, plus AVIF and
