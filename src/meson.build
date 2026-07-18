@@ -122,7 +122,6 @@ northstar_deps = [
   libm,
   libquickjs,
   libwuffs,
-  libplmpeg,
   libuchardet,
   liblexbor,
   libwamr,
@@ -156,15 +155,6 @@ if have_freetype
 endif
 
 northstar_deps += [libpsl]
-
-sdl2_dep = dependency('sdl2', required: get_option('audio'))
-ns_lib_c_args = []
-ns_sdl_deps = []
-if sdl2_dep.found()
-  ns_sdl_deps += [sdl2_dep]
-  ns_lib_c_args += ['-DNS_HAVE_SDL']
-endif
-
 
 northstar_win_subsystem = (
   host_machine.system() == 'windows' ? 'windows' : 'console'
@@ -212,21 +202,6 @@ if host_machine.system() == 'windows'
 endif
 
 # Optional helper executables (the ipc-http benchmark and the audio helper).
-rproc_deps = []
-if host_machine.system() != 'windows'
-  rproc_deps += [cc.find_library('rt', required: false)]
-endif
-
-if get_option('ipc_experiment') and host_machine.system() != 'windows'
-  executable(
-    'ipc-http-demo',
-    files('ipc_http_demo.c', 'rproc_http.c', 'ipc_http.c'),
-    include_directories: include_directories('.'),
-    dependencies: rproc_deps,
-    install: false,
-  )
-endif
-
 sdl2_dep = dependency('sdl2', required: get_option('audio'))
 if sdl2_dep.found()
   libminimp3 = static_library(
