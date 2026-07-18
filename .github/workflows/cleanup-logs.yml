@@ -1,0 +1,52 @@
+name: cleanup-logs
+
+on:
+  schedule:
+    - cron: '15 3 * * *'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Delete workflow runs older than this many days'
+        required: false
+        default: '2'
+
+concurrency:
+  group: cleanup-logs
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - name: Delete old workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DAYS: ${{ github.event.inputs.days || '2' }}
+        run: |
+          cutoff=$(date -u -d "${DAYS} days ago" +%Y-%m-%d)
+          deadline=$(( $(date -u +%s) + 13 * 60 ))
+          echo "Deleting completed workflow runs created before ${cutoff}"
+
+          deleted=0
+          while [ "$(date -u +%s)" -lt "${deadline}" ]; do
+            ids=$(gh api -X GET "repos/${GH_REPO}/actions/runs" \
+              -f status=completed -f "created=<${cutoff}" -f per_page=100 \
+              --jq '.workflow_runs[].id')
+            [ -z "${ids}" ] && break
+
+            batch=$(echo "${ids}" | wc -l)
+            echo "${ids}" | xargs -P 20 -I{} gh api -X DELETE "repos/${GH_REPO}/actions/runs/{}" >/dev/null 2>&1 || true
+            deleted=$((deleted + batch))
+            echo "Deleted ${deleted} run(s) so far..."
+          done
+
+          if [ "$(date -u +%s)" -ge "${deadline}" ]; then
+            echo "Time budget reached; remaining old runs will be cleaned up on the next scheduled run."
+          fi
+          echo "Done. Deleted ${deleted} run(s)."

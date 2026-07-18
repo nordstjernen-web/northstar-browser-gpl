@@ -1,0 +1,287 @@
+name: macos
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  workflow_dispatch:
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.compiler }} on macos-${{ matrix.macos }}
+    runs-on: macos-${{ matrix.macos }}
+    timeout-minutes: 45
+
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-26 (Tahoe) is the Apple Silicon (arm64) runner matching the
+        # macOS version Nordstjernen targets and develops on. The project ships
+        # only modern Apple Silicon builds; an Intel Mac builds from source
+        # (see docs/macOS.md). macos-latest still points at macos-15, so pin
+        # the version explicitly.
+        macos: ['26']
+        compiler: [clang]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install build dependencies (Homebrew)
+        run: |
+          brew install meson ninja pkg-config cmake gtk4 libepoxy curl ccache \
+              uchardet librsvg libpsl sqlite webp libavif sdl2 dylibbundler nasm
+          # Homebrew curl is keg-only, so a plain pkg-config resolves the macOS
+          # SDK's system libcurl (LibreSSL) instead of this OpenSSL build. Put
+          # the keg on PKG_CONFIG_PATH for every later step (build + packaging),
+          # so the bundle links OpenSSL curl with HTTP/3 and the vendored CA
+          # bundle and modern TLS curves work as designed.
+          echo "PKG_CONFIG_PATH=$(brew --prefix curl)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+
+      - name: Cache LGPL FFmpeg
+        id: ffcache
+        uses: actions/cache@v5
+        with:
+          path: ~/ffmpeg-lgpl
+          key: ffmpeg-lgpl-macos-${{ matrix.macos }}-${{ hashFiles('scripts/build-ffmpeg-lgpl.sh') }}
+
+      - name: Build LGPL FFmpeg (inline WebM)
+        run: |
+          # Stock Homebrew FFmpeg is GPL (x264/x265); build a minimal LGPL one
+          # (VP9/VP8 + Opus/Vorbis only) so it can be vendored into the .app
+          # without GPL obligations. dylibbundler then bundles its dylibs.
+          # Built once into a cached prefix (keyed on the build script).
+          if [ ! -f "$HOME/ffmpeg-lgpl/lib/pkgconfig/libavcodec.pc" ]; then
+            scripts/build-ffmpeg-lgpl.sh "$HOME/ffmpeg-lgpl" \
+              || { echo "macos: LGPL FFmpeg build failed; WebM skipped"; exit 0; }
+          else
+            echo "using cached LGPL FFmpeg at $HOME/ffmpeg-lgpl"
+          fi
+          echo "PKG_CONFIG_PATH=$HOME/ffmpeg-lgpl/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+
+      - name: Restore ccache
+        uses: actions/cache@v5
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-macos-${{ matrix.macos }}-${{ github.sha }}
+          restore-keys: |
+            ccache-macos-${{ matrix.macos }}-
+
+      - name: Configure ccache
+        run: |
+          ccache --max-size=200M
+          ccache --zero-stats
+
+      - name: Show toolchain versions
+        run: |
+          clang --version
+          ccache --version | head -1
+          meson --version
+          ninja --version
+          pkg-config --modversion gtk4
+          pkg-config --modversion libcurl
+
+      - name: Build
+        id: build
+        if: hashFiles('meson.build') != ''
+        shell: bash
+        run: |
+          set -o pipefail
+          export CC="ccache clang"
+          # AI (llama.cpp via CMake) is left out of the macOS build for speed
+          # and robustness; the CPU path still gets AI coverage on Linux CI.
+          meson setup builddir --werror -Dai=disabled 2>&1 | tee build.log
+          meson compile -C builddir 2>&1 | tee -a build.log
+
+      - name: Publish build log on failure
+        if: failure() && hashFiles('build.log') != ''
+        shell: bash
+        run: |
+          {
+            echo '## macOS build log (last 200 lines)'
+            echo
+            echo '```'
+            tail -200 build.log
+            echo '```'
+            if [ -f builddir/meson-logs/meson-log.txt ]; then
+              echo
+              echo '## meson-log.txt (last 200 lines)'
+              echo
+              echo '```'
+              tail -200 builddir/meson-logs/meson-log.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: ccache stats
+        if: always()
+        run: ccache --show-stats
+
+      - name: Smoke test (binary present and executable)
+        if: hashFiles('builddir/src/gtk/nordstjernen') != ''
+        run: |
+          test -x builddir/src/gtk/nordstjernen
+          file builddir/src/gtk/nordstjernen
+          otool -L builddir/src/gtk/nordstjernen | head -20
+
+      - name: Headless smoke (about:start)
+        if: hashFiles('builddir/src/gtk/nordstjernen') != ''
+        run: |
+          ./builddir/src/gtk/nordstjernen --headless --dump=text about:start > about.txt
+          grep -q Nordstjernen about.txt
+
+      - name: Upload build log
+        if: always() && hashFiles('build.log') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-log-macos-${{ matrix.macos }}
+          path: build.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload nordstjernen binary
+        if: hashFiles('builddir/src/gtk/nordstjernen') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: nordstjernen-macos-${{ matrix.macos }}
+          path: builddir/src/gtk/nordstjernen
+          if-no-files-found: error
+          retention-days: 14
+
+      # Optional Developer ID signing. With no MACOS_CERTIFICATE_* secrets the
+      # bundle is signed ad-hoc (still needs the xattr quarantine step on
+      # download); with them it is signed for real and notarised below.
+      - name: Import Developer ID signing identity
+        if: hashFiles('builddir/src/gtk/nordstjernen') != ''
+        continue-on-error: true
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "${MACOS_CERTIFICATE_P12_BASE64}" ]; then
+            echo "No MACOS_CERTIFICATE_P12_BASE64 secret; pack-macos.sh signs ad-hoc."
+            exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/nordstjernen-signing.keychain-db"
+          KEYCHAIN_PW="$(uuidgen)"
+          printf '%s' "${MACOS_CERTIFICATE_P12_BASE64}" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "${MACOS_CERTIFICATE_PASSWORD}" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -k "$KEYCHAIN_PW" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" \
+            $(security list-keychains -d user | sed 's/"//g')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          echo "NS_SIGN_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Build .app bundle and .dmg
+        id: pack
+        if: hashFiles('builddir/src/gtk/nordstjernen') != ''
+        continue-on-error: true
+        env:
+          BUILDDIR: ${{ github.workspace }}/builddir
+          NS_PACK_AI: disabled
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          set -o pipefail
+          bash -x ./scripts/pack-macos.sh 2>&1 | tee pack-macos.log
+
+      # Hard gate: launch the BUNDLED binary against a real HTTPS URL. The
+      # build-tree smoke test above uses the local about:start page, so it
+      # proves neither networking nor anything bundle-specific. This catches
+      # the failures that have actually shipped: a duplicate-LC_RPATH bundle
+      # that dyld refuses to launch, a missing relocated dylib, and TLS/curl
+      # regressions that break every HTTPS fetch. If the bundle exists, it
+      # must work.
+      - name: Smoke test the bundled .app (launch + HTTPS fetch)
+        if: hashFiles('dist/Nordstjernen.app/Contents/MacOS/Nordstjernen') != ''
+        run: |
+          set -o pipefail
+          BIN="dist/Nordstjernen.app/Contents/MacOS/Nordstjernen"
+          "$BIN" --headless --dump=text https://example.com | tee bundle-smoke.txt
+          grep -qi "Example Domain" bundle-smoke.txt
+
+      - name: Publish pack-macos log on failure
+        if: always() && hashFiles('pack-macos.log') != ''
+        run: |
+          {
+            echo '## pack-macos.sh log (last 300 lines)'
+            echo
+            echo '```'
+            tail -300 pack-macos.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pack-macos log
+        if: always() && hashFiles('pack-macos.log') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: pack-macos-log-${{ matrix.macos }}
+          path: pack-macos.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Notarise + staple when the App Store Connect credentials are present;
+      # otherwise the .dmg ships ad-hoc and users clear the quarantine flag
+      # once. Non-fatal so a notary outage never fails the build.
+      - name: Notarize and staple the .dmg
+        if: hashFiles('dist/nordstjernen-*-macos-*.dmg') != ''
+        continue-on-error: true
+        env:
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+        run: |
+          if [ -z "${MACOS_NOTARY_PASSWORD}" ]; then
+            echo "No MACOS_NOTARY_PASSWORD secret; skipping notarization."
+            exit 0
+          fi
+          DMG=$(ls dist/nordstjernen-*-macos-*.dmg | head -1)
+          echo "Notarizing $DMG"
+          xcrun notarytool submit "$DMG" \
+            --apple-id "${MACOS_NOTARY_APPLE_ID}" \
+            --team-id "${MACOS_NOTARY_TEAM_ID}" \
+            --password "${MACOS_NOTARY_PASSWORD}" \
+            --wait
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+
+      - name: Upload .dmg
+        if: hashFiles('dist/nordstjernen-*-macos-*.dmg') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: nordstjernen-macos-${{ matrix.macos }}-dmg
+          path: dist/nordstjernen-*-macos-*.dmg
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Remove temporary signing keychain
+        if: always() && env.NS_SIGN_KEYCHAIN != ''
+        run: security delete-keychain "$NS_SIGN_KEYCHAIN" || true

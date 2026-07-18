@@ -1,0 +1,64 @@
+plugins {
+    id 'java-library'
+    id 'application'
+}
+
+group = 'org.nordstjernen'
+version = '1.0.17'
+
+// The official Java browser: a Swing shell over the renderer process.
+//   ./gradlew run --args="https://example.com"
+// Point at the renderer with -Dnordstjernen.renderer=… or NORDSTJERNEN_RENDERER.
+application {
+    mainClass = 'org.nordstjernen.app.Browser'
+}
+
+// Single-source the version: Browser.resolveVersion() reads this resource
+// when running outside a packaged jar (e.g. ./gradlew run), so the number
+// lives only in this file.
+def generateVersionProperties = tasks.register('generateVersionProperties') {
+    def outDir = layout.buildDirectory.dir('generated/version')
+    def projectVersion = version
+    inputs.property('version', projectVersion)
+    outputs.dir(outDir)
+    doLast {
+        def f = outDir.get().file('org/nordstjernen/app/version.properties').asFile
+        f.parentFile.mkdirs()
+        f.text = "version=${projectVersion}\n"
+    }
+}
+
+sourceSets {
+    main {
+        resources {
+            srcDir generateVersionProperties
+        }
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+}
+
+// Native libraries staged by scripts/build-native.sh land in
+// src/main/resources/native/<os>-<arch>/ and are bundled into the jar.
+
+tasks.named('jar') {
+    manifest {
+        attributes(
+            'Automatic-Module-Name': 'org.nordstjernen',
+            // Grant native access so the JNI load doesn't warn on JDK 24+
+            // (and stays usable when that restriction is enforced).
+            'Enable-Native-Access': 'ALL-UNNAMED',
+            // Make the jar runnable as the browser (java -jar …), matching
+            // the nightly fat jar.
+            'Main-Class': 'org.nordstjernen.app.Browser',
+            // Surfaces in the window title as "(Java <version>)".
+            'Implementation-Title': 'Nordstjernen',
+            'Implementation-Version': version,
+        )
+    }
+}

@@ -1,0 +1,109 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+// Release signing is read from android/keystore.properties when present, so an
+// unsigned debug build needs no secrets and CI can inject a keystore for
+// signed AABs. See docs/Android.md.
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
+def licenseAssetsDir = layout.buildDirectory.dir('generated/license-assets').get().asFile
+def syncLicenseAssets = tasks.register('syncLicenseAssets', Sync) {
+    from(rootProject.projectDir.parentFile) {
+        include 'License.md'
+        include 'THIRD-PARTY-LICENSES.md'
+    }
+    into licenseAssetsDir
+}
+
+android {
+    namespace 'org.nordstjernen.WebBrowser'
+    compileSdk 36
+    ndkVersion '27.3.13750724'
+
+    defaultConfig {
+        applicationId 'org.nordstjernen.WebBrowser'
+        minSdk 34
+        targetSdk 36
+        versionCode 4
+        versionName '1.0.19'
+
+        ndk {
+            abiFilters 'arm64-v8a', 'x86_64'
+        }
+
+        // Google Play requires 16 KB page-size support for everything
+        // targeting Android 15+. NDK r27 does not align by default; this
+        // flag makes the CMake-built JNI bridge 16 KB-aligned. The engine
+        // .so gets the equivalent linker flags from build-deps.sh.
+        externalNativeBuild {
+            cmake {
+                arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path 'src/main/cpp/CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (keystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    sourceSets {
+        main {
+            assets.srcDir licenseAssetsDir
+        }
+    }
+}
+
+tasks.configureEach { task ->
+    if ((task.name.startsWith('merge') && task.name.endsWith('Assets')) ||
+            task.name.toLowerCase().contains('lint')) {
+        task.dependsOn(syncLicenseAssets)
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.activity:activity-ktx:1.9.3'
+}

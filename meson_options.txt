@@ -1,0 +1,20 @@
+option('build_date', type: 'string', value: '',
+       description: 'Build date stamp shown in the About dialog (defaults to the configure-time date).')
+option('gtk', type: 'feature', value: 'auto',
+       description: 'Build the GTK 4 desktop shell (on by default when GTK 4 is present). Disable for a renderer-only build that needs no GTK 4 toolkit at all.')
+option('ios', type: 'boolean', value: false,
+       description: 'Cross-compile the embeddable engine (libnordstjernen) for iOS: GTK-free like Android, no desktop shell/renderer/audio executables. Set by the iOS meson cross file (see ios/README.md); leave false for every desktop and Android build.')
+option('ipc_experiment', type: 'boolean', value: false,
+       description: 'Build the HTTP-vs-binary IPC comparison renderer and benchmark (experiment branch).')
+option('wasm', type: 'feature', value: 'auto',
+       description: 'Build the WebAssembly JS API over the vendored WAMR interpreter (on by default; disable on platforms WAMR does not support, e.g. NetBSD).')
+option('ai', type: 'feature', value: 'enabled',
+       description: 'Build the local AI chat start page (llama.cpp via CMake subproject).')
+option('ai_gpu', type: 'feature', value: 'auto',
+       description: 'Build a llama.cpp GPU backend for partial offload when the platform toolchain is present (Metal on macOS; Vulkan elsewhere). Falls back to CPU at runtime when no GPU is found.')
+option('audio', type: 'feature', value: 'auto',
+       description: 'Build the nordstjernen-audio playback helper (SDL2 output + minimp3/pl_mpeg decode). Auto-detects SDL2; disable for engine-only or JNI builds without SDL2.')
+option('webgpu', type: 'feature', value: 'auto',
+       description: 'Build the experimental WebGPU API (navigator.gpu) over the external wgpu-native library. Auto: built whenever wgpu-native is found (pkg-config wgpu_native, or -Dwgpu_native_root pointing at an extracted release), skipped otherwise; -Dwebgpu=enabled hard-requires it, -Dwebgpu=disabled never builds it. Even when built, WebGPU stays off at runtime until the browser is started with --enable-webgpu (or NS_WEBGPU_ALLOW=1).')
+option('wgpu_native_root', type: 'string', value: '',
+       description: 'Root of an extracted wgpu-native release (expects include/webgpu/webgpu.h and lib/libwgpu_native.{so,a}). Used only when -Dwebgpu is enabled and pkg-config cannot find wgpu_native.')

@@ -1,0 +1,161 @@
+name: linux
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  workflow_dispatch:
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.compiler }} on ubuntu-${{ matrix.ubuntu }}
+    runs-on: ubuntu-${{ matrix.ubuntu }}
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: ['26.04']
+        compiler: [clang, gcc]
+
+    env:
+      DEBIAN_FRONTEND: noninteractive
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ccache clang gcc g++ make cmake pkg-config meson ninja-build \
+            libgtk-4-dev libepoxy-dev libcurl4-openssl-dev libssl-dev \
+            libuchardet-dev librsvg2-dev libpsl-dev libsqlite3-dev \
+            libwebp-dev libavif-dev libsdl2-dev libseccomp-dev ca-certificates \
+            libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev
+
+      - name: Restore ccache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ccache
+          key: ccache-linux-${{ matrix.compiler }}-${{ github.sha }}
+          restore-keys: |
+            ccache-linux-${{ matrix.compiler }}-
+
+      - name: Configure ccache
+        run: |
+          ccache --max-size=200M
+          ccache --zero-stats
+
+      - name: Select compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+            echo "CC=ccache gcc"  >> $GITHUB_ENV
+            echo "CXX=ccache g++" >> $GITHUB_ENV
+          else
+            echo "CC=ccache clang"    >> $GITHUB_ENV
+            echo "CXX=ccache clang++" >> $GITHUB_ENV
+          fi
+
+      - name: Show toolchain versions
+        run: |
+          clang --version
+          ccache --version | head -1
+          meson --version
+          ninja --version
+          pkg-config --modversion gtk4
+          pkg-config --modversion libcurl
+          pkg-config --modversion libavcodec
+
+      # Build step is wired up the moment a meson.build (or Makefile)
+      # lands in the tree. Until then this job exists to (a) verify the
+      # toolchain we depend on is actually installable on the CI runner
+      # and (b) catch regressions in dependency availability.
+      - name: Build
+        id: build
+        shell: bash
+        run: |
+          set -o pipefail
+          if [ -f meson.build ]; then
+            meson setup builddir --werror
+            meson compile -C builddir 2>&1 | tee build.log
+          elif [ -f Makefile ]; then
+            make 2>&1 | tee build.log
+          else
+            echo "No build system present yet — toolchain verified, skipping compile."
+          fi
+
+      - name: ccache stats
+        if: always()
+        run: ccache --show-stats
+
+      - name: Smoke test (binary present and executable)
+        if: hashFiles('builddir/src/gtk/nordstjernen') != ''
+        run: |
+          test -x builddir/src/gtk/nordstjernen
+          file builddir/src/gtk/nordstjernen
+          ldd builddir/src/gtk/nordstjernen | head -20
+
+      - name: Headless smoke (about:start + <video> layout)
+        if: hashFiles('builddir/src/gtk/nordstjernen') != ''
+        run: |
+          set -o pipefail
+          ./builddir/src/gtk/nordstjernen --headless --dump=text about:start > about.txt
+          head -3 about.txt
+          grep -q Nordstjernen about.txt
+          mkdir -p smoke
+          cat > smoke/video.html <<'EOF'
+          <!doctype html><video src="x.webm" width="320" height="180"></video>
+          EOF
+          (cd smoke && python3 -m http.server 18765 >/dev/null 2>&1 &) ; sleep 1
+          ./builddir/src/gtk/nordstjernen --headless --dump=layout \
+              http://127.0.0.1:18765/video.html \
+              | tee /tmp/layout.txt
+          grep -q 'video @' /tmp/layout.txt
+          pkill -f "http.server 18765" || true
+
+      - name: Headless baseline smoke (./scripts/dev.sh smoke)
+        if: hashFiles('builddir/src/gtk/nordstjernen') != ''
+        run: ./scripts/dev.sh smoke
+
+      # Verify the engine still compiles under the Android configuration
+      # (__ANDROID__, no gdk-pixbuf/librsvg) without needing the NDK.
+      - name: Android source check (no NDK)
+        if: hashFiles('builddir/compile_commands.json') != ''
+        run: ./android/scripts/check-android-sources.sh builddir
+
+      - name: Upload build log
+        if: always() && hashFiles('build.log') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-log-${{ matrix.ubuntu }}-${{ matrix.compiler }}
+          path: build.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload nordstjernen binary
+        if: hashFiles('builddir/src/gtk/nordstjernen') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: nordstjernen-linux-${{ matrix.ubuntu }}-${{ matrix.compiler }}
+          path: builddir/src/gtk/nordstjernen
+          if-no-files-found: error
+          retention-days: 14

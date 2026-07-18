@@ -1,0 +1,16 @@
+*.a
+*.orig
+*.so
+.obj/
+build/
+build-*/
+test262/
+unicode/
+.idea
+cmake-*
+.vs
+out/
+CMakeUserPresets.json
+fuzz
+.vscode/
+microbench*.txt

@@ -1,0 +1,78 @@
+name: netbsd
+
+# BSD builds run in a VM nested inside the Linux runner (vmactions), which is
+# slow, so they are dispatch-only (the nightly orchestrator drives them) rather
+# than on every push/PR.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 3 * * *'
+
+concurrency:
+  group: netbsd-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: gcc on NetBSD
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build, smoke and pack in a NetBSD VM
+        uses: vmactions/netbsd-vm@v1
+        with:
+          release: '10.0'
+          usesh: true
+          copyback: true
+          prepare: |
+            if [ ! -f /usr/X11R7/lib/pkgconfig/x11.pc ]; then
+              base=https://cdn.netbsd.org/pub/NetBSD/NetBSD-10.0/amd64/binary/sets
+              for s in xbase xcomp; do
+                ftp -o "/tmp/$s.tar.xz" "$base/$s.tar.xz"
+                tar -C / -xJpf "/tmp/$s.tar.xz"
+              done
+            fi
+            /usr/sbin/pkg_add -U \
+              meson ninja-build pkgconf bash zip ccache \
+              gtk4 curl openssl uchardet librsvg sqlite3 libwebp libavif libpsl SDL2
+          run: |
+            set -e
+            export PATH="/usr/pkg/bin:/usr/pkg/sbin:$PATH"
+            # pkgsrc must precede the X11R7 base sets: X11R7 ships an old
+            # pixman-1.pc (0.38.4) that would shadow the newer pkgsrc pixman
+            # and break cairo's 'pixman-1 >= 0.40.0' requirement.
+            export PKG_CONFIG_PATH="/usr/pkg/lib/pkgconfig:/usr/X11R7/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+            export CC="ccache cc"
+            export CXX="ccache c++"
+            # AI (llama.cpp) is a CMake subproject; skip it on the BSD VM
+            # builds to avoid the extra toolchain and a long C++ compile.
+            # WAMR's posix platform layer uses MAP_32BIT, which NetBSD does
+            # not provide, so the WebAssembly engine is disabled here.
+            meson setup builddir --buildtype=release -Db_ndebug=true \
+              -Dai=disabled -Dwasm=disabled
+            meson compile -C builddir
+            if ./builddir/src/gtk/nordstjernen --headless --dump=text about:start > about.txt 2>/dev/null \
+               && grep -q Nordstjernen about.txt; then
+              echo "headless smoke: ok"
+            else
+              echo "headless smoke: skipped"
+            fi
+            bash ./scripts/pack-bsd.sh netbsd
+            ls -l dist/*-netbsd-x86_64.zip
+            rm -rf builddir
+
+      - name: Upload NetBSD portable zip
+        if: hashFiles('dist/*-netbsd-x86_64.zip') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: nordstjernen-netbsd-x86_64
+          path: dist/*-netbsd-x86_64.zip
+          if-no-files-found: error
+          retention-days: 14

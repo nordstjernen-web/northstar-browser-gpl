@@ -1,0 +1,106 @@
+name: android-release
+
+# Manually-triggered release bundle for Google Play. Builds the AAB with
+# gradle bundleRelease; when the four ANDROID_* signing secrets are set it is
+# signed with the Play upload key (see docs/Android.md), otherwise it is
+# unsigned. The artifact is uploaded for manual submission to the Play
+# Console internal track — nothing is auto-published.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    name: release AAB on ubuntu-26.04
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+
+    env:
+      NDK_VERSION: '27.3.13750724'
+      CMAKE_VERSION: '3.22.1'
+      ANDROID_API: '34'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure sysroot path
+        run: echo "NORDSTJERNEN_ANDROID_SYSROOT=${RUNNER_TEMP}/nordstjernen-android-sysroot" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: Install NDK, CMake and platform
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;${NDK_VERSION}" \
+            "cmake;${CMAKE_VERSION}"
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.14.5'
+
+      - name: Fetch prebuilt dependency sysroots
+        continue-on-error: true
+        run: |
+          pwsh -NoProfile -ExecutionPolicy Bypass -File android/scripts/fetch-prebuilt-deps.ps1 \
+            -Abi arm64-v8a,x86_64 \
+            -Sysroot "${NORDSTJERNEN_ANDROID_SYSROOT}"
+
+      - name: Cross-compile engine
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq meson ninja-build pkg-config
+          android/scripts/build-deps.sh arm64-v8a "${ANDROID_API}"
+          android/scripts/build-deps.sh x86_64 "${ANDROID_API}"
+
+      - name: Write upload keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "${KEYSTORE_BASE64}" ]; then
+            echo "No ANDROID_UPLOAD_KEYSTORE_BASE64 secret; building an unsigned bundle."
+            exit 0
+          fi
+          printf '%s' "${KEYSTORE_BASE64}" | base64 -d > android/upload.jks
+          cat > android/keystore.properties <<EOF
+          storeFile=${GITHUB_WORKSPACE}/android/upload.jks
+          storePassword=${KEYSTORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
+          EOF
+
+      - name: Build release bundle
+        working-directory: android
+        run: gradle bundleRelease --no-daemon --stacktrace
+
+      - name: Remove keystore
+        if: always()
+        run: rm -f android/upload.jks android/keystore.properties
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v7
+        with:
+          name: nordstjernen-android-release-aab
+          path: android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 14
