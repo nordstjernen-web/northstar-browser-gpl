@@ -45,27 +45,6 @@ and limitations under the License.
 Licensed under the Apache License, Version 2.0. See the lexbor section
 above for the license text (same license).
 
-### nestegg — ISC License
-
-> WebM / Matroska demuxer. Vendored in `subprojects/nestegg/`
-> (`src/nestegg.c` + `include/nestegg/nestegg.h`), wrapped by
-> `src/webm_demux.c`.
-> <https://github.com/kinetiknz/nestegg>
->
-> Copyright © 2010 Mozilla Foundation
-
-    Permission to use, copy, modify, and distribute this software for any
-    purpose with or without fee is hereby granted, provided that the above
-    copyright notice and this permission notice appear in all copies.
-
-    THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-    WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-    MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-    ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-    WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-    ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-    OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
 ### quickjs-ng — MIT License
 
 > JavaScript engine.
@@ -106,6 +85,32 @@ See the lexbor section above for the base Apache 2.0 text; the full
 license including the LLVM exceptions is reproduced in
 `src/wamr/LICENSE`.
 
+### minimp3 — CC0 1.0 (public domain)
+
+> MP3 decoder for the `northstar-audio` playback helper. Vendored as the
+> single header `src/audio/minimp3.h`.
+> <https://github.com/lieff/minimp3>
+>
+> Copyright the minimp3 authors.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. See:
+
+  <https://creativecommons.org/publicdomain/zero/1.0/>
+
+### pl_mpeg — MIT License
+
+> MPEG-1 Audio Layer II (MP2) decoder for the `northstar-audio` playback
+> helper. Fetched as the `plmpeg` meson subproject
+> (`subprojects/plmpeg/pl_mpeg.h`).
+> <https://github.com/phoboslab/pl_mpeg>
+>
+> Copyright (c) 2019 Dominic Szablewski
+
+Licensed under the MIT License. See the quickjs-ng section above for the
+full text (same license).
+
 ### libcurl — curl license (MIT-like)
 
 > HTTP/TLS client.
@@ -136,29 +141,6 @@ OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 Licensed under the Apache License, Version 2.0. See the lexbor section
 above for the license text (same license).
 
-### libwebp — BSD 3-Clause License
-
-> WebP image decoding.
-> <https://chromium.googlesource.com/webm/libwebp>
->
-> Copyright (c) 2010, Google Inc. All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are
-met: redistributions of source code must retain the above copyright
-notice, this list of conditions and the following disclaimer;
-redistributions in binary form must reproduce the above copyright
-notice, this list of conditions and the following disclaimer in the
-documentation and/or other materials provided with the distribution;
-neither the name of Google nor the names of its contributors may be used
-to endorse or promote products derived from this software without
-specific prior written permission. THIS SOFTWARE IS PROVIDED BY THE
-COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
-WARRANTIES ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
-CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING IN ANY WAY OUT OF THE USE OF
-THIS SOFTWARE.
-
 ### libpsl — MIT License
 
 > Public Suffix List handling for cookie / origin policy.
@@ -180,8 +162,8 @@ non-commercial, without restriction.
 
 ### libepoxy — MIT License
 
-> OpenGL / OpenGL ES function-pointer management (used by the WebGL
-> backend and GTK's GL rendering).
+> OpenGL / OpenGL ES function-pointer management (pulled in transitively
+> by GTK's GL rendering).
 > <https://github.com/anholt/libepoxy>
 >
 > Copyright (c) 2013-2014 Intel Corporation
@@ -207,7 +189,8 @@ may not be removed from any source distribution.
 
 ### libseccomp — GNU LGPL 2.1 (Linux only)
 
-> Syscall-filter sandbox for the renderer process. Linked only on Linux.
+> Syscall-filter sandbox for the headless/tooling process and the
+> `northstar-audio` helper. Linked only on Linux.
 > <https://github.com/seccomp/libseccomp>
 >
 > Copyright (c) Paul Moore and the libseccomp contributors.
@@ -248,29 +231,22 @@ license text is available at:
 
 Per LGPL section 6, since Northstar links to these libraries
 dynamically, you are entitled to modify them and re-link Northstar
-against the modified copies. On Windows / macOS bundles the libraries
-are shipped alongside the executable as ordinary DLLs / dylibs that you
-can replace; on Linux distributions they are loaded from the system
-package manager.
+against the modified copies. On the Windows bundle the libraries are
+shipped alongside the executable as ordinary DLLs that you can replace;
+on Linux distributions they are loaded from the system package manager.
 
-### FFmpeg — libavformat / libavcodec / libavutil / libswscale / libswresample — GNU LGPL 2.1 or later (optional, inline WebM)
+### SDL2 — zlib License
 
-> Container demuxing and audio/video decoding for the inline WebM path
-> (VP9/VP8 video, Opus/Vorbis audio). <https://ffmpeg.org>
+> Cross-platform audio output (WASAPI / CoreAudio / ALSA) for the
+> `northstar-audio` playback helper.
+> <https://www.libsdl.org>
 >
-> Copyright the FFmpeg developers.
+> Copyright (c) 1997-2024 Sam Lantinga and the SDL contributors.
 
-Only present when Northstar was built with WebM support. The Windows
-release bundles MSYS2's `mingw-w64-x86_64-ffmpeg`, a GPL build of
-FFmpeg; the enabled VP8/VP9/Opus/Vorbis decoders are FFmpeg's own
-implementations. FFmpeg's licensing terms are documented at:
-
-  <https://www.ffmpeg.org/legal.html>
-
-The libraries are linked dynamically: on the Windows bundle they ship
-beside the executable as ordinary DLLs you can replace and re-link
-against; on Linux they are loaded from the distribution's FFmpeg
-packages.
+Licensed under the zlib License. See the zlib section above for the
+full text (same license). Linked only into the `northstar-audio`
+helper, and only when SDL2 is present at build time (meson `audio`
+feature).
 
 ### Cairo — LGPL-2.1 or MPL-1.1
 
@@ -285,11 +261,11 @@ Mozilla Public License 1.1. See:
 - <https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html>
 - <https://www.mozilla.org/MPL/1.1/>
 
-### librsvg — GNU LGPL 2.1 or later (Windows / macOS bundles)
+### librsvg — GNU LGPL 2.1 or later
 
-> SVG renderer used by gdk-pixbuf to decode SVG images on Windows
-> and macOS. Not linked on Linux (system gdk-pixbuf provides its own
-> SVG loader).
+> SVG image decoder. A required dependency on all platforms
+> (`librsvg-2.0 >= 2.54`); the engine calls it directly to rasterise
+> SVG documents.
 > <https://gitlab.gnome.org/GNOME/librsvg>
 >
 > Copyright the GNU Project and contributors.
@@ -297,19 +273,33 @@ Mozilla Public License 1.1. See:
 Licensed under the GNU Lesser General Public License version 2.1 or
 later. See the LGPL section above for terms and obligations.
 
+### libavif — BSD 2-Clause
+
+> AVIF image decoding (AV1 still images). A required dependency
+> (`libavif`); tried before the GdkPixbuf fallback for AVIF bytes.
+> <https://github.com/AOMediaCodec/libavif>
+>
+> Copyright the AOMedia / libavif authors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the BSD 2-Clause conditions
+are met. See:
+
+  <https://github.com/AOMediaCodec/libavif/blob/main/LICENSE>
+
 ### Optional dynamic dependencies
 
 These are linked only when present on the build host (meson
 `required: false`). When a build bundles them, their notices apply:
 
-- **libavif** — BSD 2-Clause, © the AOMedia / libavif authors. AVIF
-  image decoding.
-- **Poppler** (`poppler-glib`) — GNU GPL 2.0 or later, © the Poppler
-  developers. PDF rendering. Note: Poppler is GPL; a build that links it
-  is subject to the GPL for that combined binary.
 - **Fontconfig** — MIT-style license, © Keith Packard and contributors.
 - **FreeType** — FreeType License (BSD-style with credit clause) or GNU
   GPL 2.0, at your option, © The FreeType Project.
+- **Enchant** — GNU LGPL 2.1 or later, © the AbiSource / Enchant
+  contributors. Optional on-screen spell-checking.
+- **opusfile / libopus / vorbisfile / libvorbis / libogg** — BSD 3-Clause,
+  © the Xiph.Org Foundation. Optional Ogg Opus / Vorbis decode in the
+  `northstar-audio` helper.
 
 ---
 
