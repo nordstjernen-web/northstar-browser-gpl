@@ -2,8 +2,10 @@ Northstar web browser (open source GPL edition)
 ==================================================
 
 Northstar is a web browser, written from scratch in C,
-focused on supporting the HTML and CSS standards. This is a pared-down
-desktop build that targets Linux, MacOs and Windows.
+focused on supporting the HTML and CSS standards. 
+The browser runs on the platforms Linux, MacOs and Windows.
+
+Northstar is open source software, licensed under the GNU General Public License, version 3 or later. 
 
 ![Northstar showing its about:start page](docs/screenshot.png)
 
