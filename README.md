@@ -15,8 +15,9 @@ filter added in the headless/tooling and audio-helper processes · no JIT.
 See [SECURITY.md](SECURITY.md) for the exact per-mode posture.
 
 **Minimalism:** one window, one page, one process. The engine is a
-compact body of C — small enough for one person to read and audit
-end-to-end.
+compact body of C — about 142,000 lines of hand-written C (excluding
+the vendored WAMR, Wuffs and audio decoders) — small enough for one
+person to read and audit end-to-end.
 
 ## What this edition is
 
