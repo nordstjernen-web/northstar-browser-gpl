@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up MSYS2 (mingw64)
         uses: msys2/setup-msys2@v2
@@ -73,7 +73,7 @@ jobs:
 
       - name: Restore ccache
         id: ccache-restore
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}\ccache
           key: ccache-windows-${{ matrix.windows }}-${{ github.sha }}
@@ -98,7 +98,7 @@ jobs:
 
       - name: Cache LGPL FFmpeg
         id: ffcache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}\ffmpeg-lgpl
           key: ffmpeg-lgpl-win-${{ matrix.windows }}-${{ hashFiles('scripts/build-ffmpeg-lgpl.sh') }}
@@ -138,7 +138,7 @@ jobs:
       - name: Save ccache
         if: always() && steps.ccache-restore.outputs.cache-hit != 'true'
         continue-on-error: true
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}\ccache
           key: ccache-windows-${{ matrix.windows }}-${{ github.sha }}
