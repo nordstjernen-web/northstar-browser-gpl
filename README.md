@@ -7,6 +7,8 @@ The browser runs on the platforms Linux, MacOs and Windows.
 
 Northstar is open source software, licensed under the GNU General Public License, version 3 or later. 
 
+The Northstar web browser is a project related to [Nordstjernen project](https://github.com/nordstjernen-web/nordstjernen).
+
 ![Northstar showing its about:start page](docs/screenshot.png)
 
 **HTML Standards:** Behaviour is measured against the spec text, section
