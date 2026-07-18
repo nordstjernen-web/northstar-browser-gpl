@@ -15,7 +15,7 @@ filter added in the headless/tooling and audio-helper processes · no JIT.
 See [SECURITY.md](SECURITY.md) for the exact per-mode posture.
 
 **Minimalism:** one window, one page, one process. The engine is a
-compact body of C — about 142,000 lines of hand-written C (excluding
+compact body of C — about 142,000 lines of original C (excluding
 the vendored WAMR, Wuffs and audio decoders) — small enough for one
 person to read and audit end-to-end.
 
@@ -73,8 +73,8 @@ quickjs-ng are fetched by `meson setup` as pinned upstream subprojects
 
 ## Dependencies
 
-Northstar's engine is hand-written — it contains no forked browser
-engine (no Gecko, WebKit, or Blink). It is the GPL edition of the
+Northstar's engine is written from scratch — it contains no forked
+browser engine (no Gecko, WebKit, or Blink). It is the GPL edition of the
 [Nordstjernen project](https://github.com/nordstjernen-web/nordstjernen).
 
 **Fetched at `meson setup`** (pinned upstream meson subprojects, `subprojects/*.wrap`):
