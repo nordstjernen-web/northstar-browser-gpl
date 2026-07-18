@@ -8,6 +8,7 @@ project(
     'cpp_std=c++17',
     'warning_level=2',
     'quickjs-ng:warning_level=0',
+    'quickjs-ng:default_library=static',
     'buildtype=release',
     'optimization=3',
     'b_ndebug=true',
