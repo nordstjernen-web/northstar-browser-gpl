@@ -1,0 +1,138 @@
+name: macos
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  workflow_dispatch:
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: clang on macos-${{ matrix.macos }}
+    runs-on: macos-${{ matrix.macos }}
+    timeout-minutes: 45
+
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        macos: ['26']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install build dependencies (Homebrew)
+        run: |
+          brew install meson ninja pkg-config cmake gtk4 curl ccache \
+              openssl@3 uchardet librsvg libpsl sqlite libavif sdl2
+          {
+            echo "PKG_CONFIG_PATH=$(brew --prefix curl)/lib/pkgconfig:$(brew --prefix openssl@3)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          } >> "$GITHUB_ENV"
+
+      - name: Restore ccache
+        uses: actions/cache@v5
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-macos-${{ matrix.macos }}-${{ github.sha }}
+          restore-keys: |
+            ccache-macos-${{ matrix.macos }}-
+
+      - name: Configure ccache
+        run: |
+          ccache --max-size=200M
+          ccache --zero-stats
+
+      - name: Show toolchain versions
+        run: |
+          clang --version
+          ccache --version | head -1
+          meson --version
+          ninja --version
+          pkg-config --modversion gtk4
+          pkg-config --modversion libcurl
+
+      - name: Build
+        shell: bash
+        run: |
+          set -o pipefail
+          export CC="ccache clang"
+          meson setup builddir 2>&1 | tee build.log
+          meson compile -C builddir 2>&1 | tee -a build.log
+
+      - name: Publish build log on failure
+        if: failure() && hashFiles('build.log') != ''
+        shell: bash
+        run: |
+          {
+            echo '## macOS build log (last 200 lines)'
+            echo
+            echo '```'
+            tail -200 build.log
+            echo '```'
+            if [ -f builddir/meson-logs/meson-log.txt ]; then
+              echo
+              echo '## meson-log.txt (last 200 lines)'
+              echo
+              echo '```'
+              tail -200 builddir/meson-logs/meson-log.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: ccache stats
+        if: always()
+        run: ccache --show-stats
+
+      - name: Smoke test (binary present and executable)
+        if: hashFiles('builddir/src/gtk/northstar') != ''
+        run: |
+          test -x builddir/src/gtk/northstar
+          file builddir/src/gtk/northstar
+          otool -L builddir/src/gtk/northstar | head -20
+
+      - name: Headless smoke (about:start)
+        if: hashFiles('builddir/src/gtk/northstar') != ''
+        run: |
+          ./builddir/src/gtk/northstar --headless --dump=text about:start > about.txt
+          head -20 about.txt
+          grep -qi northstar about.txt
+
+      - name: Upload build log
+        if: always() && hashFiles('build.log') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-log-macos-${{ matrix.macos }}
+          path: build.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload northstar binary
+        if: hashFiles('builddir/src/gtk/northstar') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: northstar-macos-${{ matrix.macos }}
+          path: builddir/src/gtk/northstar
+          if-no-files-found: error
+          retention-days: 14
