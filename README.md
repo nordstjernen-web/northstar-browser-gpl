@@ -6,6 +6,8 @@ focused on supporting the HTML and CSS standards. This is a pared-down
 desktop build that targets **Linux** (and Windows), with a deliberately
 small feature set.
 
+![Northstar showing its about:start page](docs/screenshot.png)
+
 **HTML Standards:** Behaviour is measured against the spec text, section
 by section, not against another browser.
 
