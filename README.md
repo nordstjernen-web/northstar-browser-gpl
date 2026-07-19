@@ -11,6 +11,8 @@ The Northstar web browser is a project related to [Nordstjernen project](https:/
 
 ![Northstar showing its about:start page](docs/screenshot.png)
 
+![Best viewed in Northstar](docs/best-viewed-in-northstar.gif)
+
 **HTML Standards:** Behaviour is measured against the spec text, section
 by section, not against another browser.
 
