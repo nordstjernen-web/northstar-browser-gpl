@@ -2328,8 +2328,7 @@ static void
 ns_wasm_register_class(JSRuntime *rt, JSClassID *class_id,
                        const JSClassDef *def)
 {
-    if (!*class_id)
-        JS_NewClassID(rt, class_id);
+    ns_new_class_id(class_id);
     if (!JS_IsRegisteredClass(rt, *class_id))
         JS_NewClass(rt, *class_id, def);
 }

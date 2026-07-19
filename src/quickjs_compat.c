@@ -5,6 +5,22 @@
 
 #include "quickjs_compat.h"
 
+#include <glib.h>
+
+JSClassID ns_new_class_id(JSClassID *pclass_id)
+{
+    static gint next_id = 192;
+    gint id = g_atomic_int_get((gint *)pclass_id);
+    if (id == 0) {
+        gint fresh = g_atomic_int_add(&next_id, 1);
+        if (!g_atomic_int_compare_and_exchange((gint *)pclass_id, 0, fresh))
+            id = g_atomic_int_get((gint *)pclass_id);
+        else
+            id = fresh;
+    }
+    return (JSClassID)id;
+}
+
 JSContext *JS_GetCallerRealm(JSContext *ctx)
 {
     return ctx;

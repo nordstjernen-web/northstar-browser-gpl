@@ -2,6 +2,7 @@
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+#include "quickjs_compat.h"
 #include "js_internal.h"
 
 #include <math.h>
@@ -3392,12 +3393,12 @@ ns_offscreen_convertToBlob(JSContext *ctx, JSValueConst this_val,
 
 void ns_canvas_register_image_bitmap_class(JSRuntime *rt)
 {
-    if (!ns_image_bitmap_class_id) JS_NewClassID(rt, &ns_image_bitmap_class_id);
+    ns_new_class_id(&ns_image_bitmap_class_id);
     JS_NewClass(rt, ns_image_bitmap_class_id, &ns_image_bitmap_class);
 }
 
 void ns_canvas_register_path2d_class(JSRuntime *rt)
 {
-    if (!ns_path2d_class_id) JS_NewClassID(rt, &ns_path2d_class_id);
+    ns_new_class_id(&ns_path2d_class_id);
     JS_NewClass(rt, ns_path2d_class_id, &ns_path2d_class);
 }

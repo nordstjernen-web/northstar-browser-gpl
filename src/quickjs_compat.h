@@ -16,4 +16,6 @@ JSContext *JS_GetFunctionRealm(JSContext *ctx, JSValueConst func_obj);
 int JS_RepointArrayBuffer(JSContext *ctx, JSValueConst obj, uint8_t *data,
                           size_t byte_length);
 
+JSClassID ns_new_class_id(JSClassID *pclass_id);
+
 #endif
