@@ -603,10 +603,6 @@ on_view_notify(NsProcView *v, NsProcEvent evt, const char *text,
         gtk_widget_set_sensitive(pw->back, ns_proc_view_can_back(v));
         gtk_widget_set_sensitive(pw->forward, ns_proc_view_can_forward(v));
         break;
-    case NS_PROC_EVT_NEWTAB:
-        if (text && *text)
-            proc_window_load(pw, text);
-        break;
     case NS_PROC_EVT_LOADING:
         set_loading_ui(pw, text && *text == '1');
         break;
@@ -617,8 +613,6 @@ on_view_notify(NsProcView *v, NsProcEvent evt, const char *text,
                               parts[1] && *parts[1] ? parts[1] : NULL);
             g_strfreev(parts);
         }
-        break;
-    case NS_PROC_EVT_FAVICON:
         break;
     }
 }
@@ -846,8 +840,6 @@ static void act_settings(GSimpleAction *action, GVariant *parameter,
                          gpointer user_data);
 static void on_bookmarks_clicked(GtkButton *button, gpointer user_data);
 
-/* ---- Task manager: lists each tab's sandboxed renderer process ---- */
-
 typedef struct {
     ProcWindow *pw;
     GtkWidget  *list;
@@ -1039,9 +1031,10 @@ task_mgr_refresh(NsTaskMgr *tm)
 
         const char *title = ns_proc_view_title(v);
         const char *url = ns_proc_view_url(v);
-        const char *tab = (title && *title) ? title
-                        : (url && *url)     ? url : ns_i18n("New Tab");
-        char *name = g_strdup_printf("%s  —  %s", ns_i18n("HTML renderer"), tab);
+        const char *page = (title && *title) ? title
+                         : (url && *url) ? url : ns_i18n("New Page");
+        char *name = g_strdup_printf("%s  —  %s",
+                                     ns_i18n("HTML renderer"), page);
 
         task_mgr_add_row(tm, "text-x-generic-symbolic", name, pid, state,
                          rss, v);

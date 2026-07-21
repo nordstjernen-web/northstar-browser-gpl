@@ -1,5 +1,4 @@
-/* Northstar — application entry point: process bootstrap, headless render
- * driver dispatch, and the out-of-process (IPC) GTK browser shell.
+/* Northstar — application entry point for GUI and headless modes.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -350,9 +349,6 @@ ns_apply_gsk_renderer(const char *pref)
               "(expected one of: auto, gl, ngl, vulkan, cairo)", pref);
 }
 
-/* The GTK GUI runs the process-per-tab IPC renderer (a thin shell spawning
- * sandboxed northstar-renderer processes). Headless / dump / eval / inspect
- * modes run the in-process engine without a display. */
 static gboolean
 ns_proc_mode_wanted(int argc, char **argv)
 {
@@ -480,10 +476,6 @@ main(int argc, char **argv)
 
     gboolean proc_mode = ns_proc_mode_wanted(argc, argv);
 
-    /* The GUI shell is supervised: a normal launch becomes a tiny watchdog
-     * that spawns the real (thin, engine-free) shell as a child and restarts
-     * it on crash or hang. The supervisor inits no network, sandbox, or UI;
-     * those belong to the child. Headless/tooling modes are never supervised. */
     if (proc_mode) {
         const ns_config *cfg = ns_config_get();
         if (ns_watchdog_should_supervise(argc, argv,
@@ -499,18 +491,13 @@ main(int argc, char **argv)
     ns_security_win32_mitigations_init(FALSE);
     ns_add_screenshot_writable_dirs(argc, argv);
 
-    gboolean single_process = proc_mode;
-    if (single_process)
+    if (proc_mode)
         ns_rproc_single_process_enable();
 
-    if (proc_mode) {
+    if (proc_mode)
         ns_security_add_writable_dir("/dev/shm");
-        ns_security_sandbox_init(g_self_exe);
-        ns_security_seccomp_init();
-    } else {
-        ns_security_sandbox_init(g_self_exe);
-        ns_security_seccomp_init();
-    }
+    ns_security_sandbox_init(g_self_exe);
+    ns_security_seccomp_init();
     ns_debug_log_init();
     g_log_set_writer_func(ns_log_writer, NULL, NULL);
 #ifdef G_OS_WIN32
@@ -622,14 +609,9 @@ main(int argc, char **argv)
     if (proc_mode) {
         if (ns_watchdog_is_child(argc, argv)) {
             ns_watchdog_child_guard_parent_death();
-            /* The multiprocess shell runs no page JS, so any prolonged
-             * unresponsiveness means a wedged UI loop (blit/IPC deadlock). In
-             * single-process mode the shell does run page JS on its main
-             * loop, so extend the hang budget by the configured JS eval
-             * budget, exactly as an in-process engine requires. */
             const ns_config *wcfg = ns_config_get();
             ns_watchdog_child_arm_hang_monitor(
-                single_process && wcfg ? wcfg->js_eval_budget_ms : 0);
+                wcfg ? wcfg->js_eval_budget_ms : 0);
         }
         const char *session = ns_watchdog_child_session_arg(argc, argv);
         gboolean recover = ns_watchdog_child_is_recovery();

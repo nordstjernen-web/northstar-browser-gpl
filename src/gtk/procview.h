@@ -1,4 +1,4 @@
-/* Northstar — GTK view backed by the out-of-process renderer (thin client).
+/* Northstar — GTK view backed by the internal renderer protocol.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -18,11 +18,9 @@ typedef enum {
     NS_PROC_EVT_TITLE,
     NS_PROC_EVT_URL,
     NS_PROC_EVT_STATUS,
-    NS_PROC_EVT_NEWTAB,
     NS_PROC_EVT_HISTORY,
     NS_PROC_EVT_LOADING,
-    NS_PROC_EVT_DOWNLOAD,
-    NS_PROC_EVT_FAVICON
+    NS_PROC_EVT_DOWNLOAD
 } NsProcEvent;
 
 typedef void (*NsProcNotify)(NsProcView *view, NsProcEvent evt,
@@ -37,8 +35,7 @@ GtkWidget  *ns_proc_view_widget(NsProcView *view);
 void        ns_proc_view_set_notify(NsProcView *view, NsProcNotify cb,
                                     gpointer user_data);
 
-/* Mark this tab's renderer as private/incognito. Must be set before the first
-   load so the spawned renderer starts in ephemeral mode. */
+/* Mark the renderer session as private/incognito before the first load. */
 void        ns_proc_view_set_private(NsProcView *view, gboolean private_mode);
 gboolean    ns_proc_view_is_private(NsProcView *view);
 
@@ -60,12 +57,7 @@ gboolean    ns_proc_view_is_loading(NsProcView *view);
 int         ns_proc_view_security(NsProcView *view);
 const char *ns_proc_view_remote_ip(NsProcView *view);
 
-/* The tab's current favicon as a paintable, or NULL. Owned by the view; ref it
- * if you keep it. Updated just before an NS_PROC_EVT_FAVICON notification. */
-GdkPaintable *ns_proc_view_favicon(NsProcView *view);
-
-/* Task-manager support: this tab's renderer OS pid (-1 if none), and a
- * forceful "End task" that kills the renderer (the tab respawns on next use). */
+/* Task-manager support for the renderer session. */
 int         ns_proc_view_renderer_pid(NsProcView *view);
 void        ns_proc_view_end_task(NsProcView *view);
 

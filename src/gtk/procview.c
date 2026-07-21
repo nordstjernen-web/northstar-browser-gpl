@@ -1,4 +1,4 @@
-/* Northstar — GTK thin client over the out-of-process renderer (rproc).
+/* Northstar — GTK view backed by the internal renderer protocol.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -9,7 +9,6 @@
 
 #include "proc_limits.h"
 #include "rproc_http.h"
-#include "rproc_inproc.h"
 #include "net.h"
 
 #include <cairo.h>
@@ -43,9 +42,9 @@ typedef enum {
     REQ_LOAD, REQ_RENDER, REQ_LINK, REQ_CLICK, REQ_VIEWPORT, REQ_KEY,
     REQ_SELECT, REQ_HOVER, REQ_RELEASE, REQ_FIND, REQ_EXPORT, REQ_CONSOLE,
     REQ_EVAL, REQ_DUMP, REQ_DROPFILES, REQ_SCROLL, REQ_SCROLLBAR,
-    REQ_CAMERA, REQ_FAVICON, REQ_QUIT
+    REQ_CAMERA, REQ_QUIT
 } ReqType;
-typedef enum { ACT_HOVER, ACT_NAVIGATE, ACT_NEWTAB, ACT_CONTEXT } LinkAct;
+typedef enum { ACT_HOVER, ACT_NAVIGATE, ACT_CONTEXT } LinkAct;
 
 enum {
     DEV_TAB_CONSOLE = 0,
@@ -88,7 +87,7 @@ typedef struct {
 typedef enum {
     RES_PAGE, RES_FRAME, RES_LINK, RES_CLICK, RES_VIEWPORT, RES_KEY,
     RES_SELECT, RES_COPY, RES_HOVER, RES_RELEASE, RES_FIND, RES_EXPORT,
-    RES_CONSOLE, RES_EVAL, RES_DUMP, RES_FAVICON, RES_DROPFILES, RES_SCROLL,
+    RES_CONSOLE, RES_EVAL, RES_DUMP, RES_DROPFILES, RES_SCROLL,
     RES_SCROLLBAR
 } ResType;
 
@@ -121,8 +120,6 @@ typedef struct {
     int              find_total, find_current, find_scroll_y;
     char            *media_url;
     int              media_is_video, media_stream;
-    unsigned char   *favicon_data;
-    int              favicon_w, favicon_h, favicon_stride;
     int              dump_tab;
     gboolean         inspect;
 } Res;
@@ -162,8 +159,6 @@ struct NsProcView {
     cairo_surface_t *frame;
     cairo_surface_t *stage[2];
     int              stage_next;
-
-    GdkPaintable    *favicon;
 
     gboolean    render_inflight;
     gboolean    render_pending;
@@ -477,9 +472,6 @@ pv_free(NsProcView *v)
     if (v->frame)
         cairo_surface_destroy(v->frame);
     v->frame = NULL;
-    if (v->favicon)
-        g_object_unref(v->favicon);
-    v->favicon = NULL;
     if (v->ctx_popover)
         gtk_widget_unparent(v->ctx_popover);
     if (v->ctx_actions)
@@ -891,16 +883,6 @@ worker_main(gpointer data)
         } else if (req->type == REQ_CAMERA) {
             if (v->proc)
                 ns_rproc_http_resolve_camera(v->proc, req->url, req->mods);
-        } else if (req->type == REQ_FAVICON) {
-            Res *res = g_new0(Res, 1);
-            res->view = pv_ref(v);
-            res->type = RES_FAVICON;
-            res->seq = req->seq;
-            if (v->proc)
-                res->favicon_data = ns_rproc_http_favicon(
-                    v->proc, &res->favicon_w, &res->favicon_h,
-                    &res->favicon_stride);
-            post(res);
         }
         g_free(req->url);
         g_free(req->key);
@@ -920,15 +902,6 @@ static void
 push_req(NsProcView *v, Req *req)
 {
     g_async_queue_push(v->queue, req);
-}
-
-static void
-request_favicon(NsProcView *v)
-{
-    Req *req = g_new0(Req, 1);
-    req->type = REQ_FAVICON;
-    req->seq = v->load_seq;
-    push_req(v, req);
 }
 
 static int
@@ -1505,8 +1478,6 @@ const char *ns_proc_view_title(NsProcView *v) { return v->current_title; }
 int ns_proc_view_security(NsProcView *v) { return v ? v->security : 0; }
 const char *ns_proc_view_remote_ip(NsProcView *v) { return v ? v->remote_ip : NULL; }
 gboolean ns_proc_view_is_loading(NsProcView *v) { return v->loading; }
-GdkPaintable *ns_proc_view_favicon(NsProcView *v) { return v ? v->favicon : NULL; }
-
 int
 ns_proc_view_renderer_pid(NsProcView *v)
 {
@@ -1665,7 +1636,6 @@ on_result(gpointer data)
         post_emit(v, NS_PROC_EVT_STATUS, ns_i18n("Done"));
         finish_loading(v);
         request_render(v);
-        request_favicon(v);
     } else if (res->type == RES_FRAME) {
         gboolean current = res->seq == v->render_seq;
         if (current && res->ok) {
@@ -1712,7 +1682,7 @@ on_result(gpointer data)
                 do_load(v, v->current_url, FALSE, FALSE);
             } else {
                 post_emit(v, NS_PROC_EVT_STATUS,
-                          ns_i18n("This tab's renderer keeps failing — "
+                          ns_i18n("The page renderer keeps failing — "
                                   "reload to retry"));
                 finish_loading(v);
                 clear_busy_cursor(v);
@@ -1784,8 +1754,6 @@ on_result(gpointer data)
             if (res->action == ACT_NAVIGATE) {
                 navigated = TRUE;
                 ns_proc_view_load(v, res->href);
-            } else if (res->action == ACT_NEWTAB) {
-                post_emit(v, NS_PROC_EVT_NEWTAB, res->href);
             }
         } else if (!v->busy_cursor) {
             pv_set_named_cursor(area, res->cursor);
@@ -1924,20 +1892,6 @@ on_result(gpointer data)
                 buf, (res->href && *res->href) ? res->href : ns_i18n("(empty)"),
                 -1);
         }
-    } else if (res->type == RES_FAVICON) {
-        if (res->seq != v->load_seq)
-            goto done;
-        g_clear_object(&v->favicon);
-        if (res->favicon_data && res->favicon_w > 0 && res->favicon_h > 0) {
-            gsize len = (gsize)res->favicon_stride * (gsize)res->favicon_h;
-            GBytes *bytes = g_bytes_new(res->favicon_data, len);
-            GdkTexture *tex = gdk_memory_texture_new(
-                res->favicon_w, res->favicon_h,
-                GDK_MEMORY_B8G8R8A8_PREMULTIPLIED, bytes, res->favicon_stride);
-            g_bytes_unref(bytes);
-            v->favicon = GDK_PAINTABLE(tex);
-        }
-        post_emit(v, NS_PROC_EVT_FAVICON, NULL);
     }
 
 done:
@@ -1953,7 +1907,6 @@ done:
     free(res->href);
     free(res->cursor);
     free(res->media_url);
-    free(res->favicon_data);
     pv_unref(res->view);
     g_free(res);
     return G_SOURCE_REMOVE;
@@ -2128,15 +2081,6 @@ on_ctx_copy_url(GSimpleAction *a, GVariant *p, gpointer ud)
 }
 
 static void
-on_ctx_open_newtab(GSimpleAction *a, GVariant *p, gpointer ud)
-{
-    (void)a; (void)p;
-    NsProcView *v = ud;
-    if (v->ctx_link && *v->ctx_link)
-        post_emit(v, NS_PROC_EVT_NEWTAB, v->ctx_link);
-}
-
-static void
 on_ctx_open_link(GSimpleAction *a, GVariant *p, gpointer ud)
 {
     (void)a; (void)p;
@@ -2192,7 +2136,6 @@ ctx_install_actions(NsProcView *v)
         { "reload",      on_ctx_reload,      NULL, NULL, NULL, {0} },
         { "copy-url",    on_ctx_copy_url,    NULL, NULL, NULL, {0} },
         { "open-link",   on_ctx_open_link,   NULL, NULL, NULL, {0} },
-        { "open-newtab", on_ctx_open_newtab, NULL, NULL, NULL, {0} },
         { "copy-link",   on_ctx_copy_link,   NULL, NULL, NULL, {0} },
         { "copy-sel",    on_ctx_copy_sel,    NULL, NULL, NULL, {0} },
         { "select-all",  on_ctx_select_all,  NULL, NULL, NULL, {0} },
@@ -2215,7 +2158,6 @@ show_context_menu(NsProcView *v, const char *href)
     ctx_action_enable(v, "back", ns_proc_view_can_back(v));
     ctx_action_enable(v, "forward", ns_proc_view_can_forward(v));
     ctx_action_enable(v, "open-link", v->ctx_link != NULL);
-    ctx_action_enable(v, "open-newtab", v->ctx_link != NULL);
     ctx_action_enable(v, "copy-link", v->ctx_link != NULL);
     ctx_action_enable(v, "copy-sel", v->has_selection);
 
@@ -2223,8 +2165,6 @@ show_context_menu(NsProcView *v, const char *href)
     if (v->ctx_link) {
         GMenu *s = g_menu_new();
         g_menu_append(s, ns_i18n("Open Link"), "ctx.open-link");
-        if (!ns_rproc_single_process_enabled())
-            g_menu_append(s, ns_i18n("Open Link in New Tab"), "ctx.open-newtab");
         g_menu_append(s, ns_i18n("Copy Link Address"), "ctx.copy-link");
         g_menu_append_section(menu, NULL, G_MENU_MODEL(s));
         g_object_unref(s);
@@ -2366,7 +2306,7 @@ on_pressed(GtkGestureClick *gesture, int n_press, double x, double y,
     int px = v->scroll_x + (int)(x / s);
     int py = v->scroll_y + (int)(y / s);
     if (button == GDK_BUTTON_MIDDLE || (mods & GDK_CONTROL_MASK)) {
-        request_link(v, px, py, ACT_NEWTAB);
+        request_link(v, px, py, ACT_NAVIGATE);
         return;
     }
     int kmods = ((mods & GDK_SHIFT_MASK)   ? 1 : 0) |
