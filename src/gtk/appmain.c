@@ -603,6 +603,8 @@ main(int argc, char **argv)
             hopts.url = argv[i];
         }
     }
+    if (private_window)
+        ns_config_mut()->private_mode = TRUE;
     if (!dump_set && (hopts.inspect || hopts.inspect_at || hopts.wpt))
         hopts.dump = NS_DUMP_NONE;
 

@@ -90,6 +90,8 @@ struct ns_worker_host {
     gboolean      is_module;
     gboolean      is_service_worker;
     gint          sw_active;
+    gint          sw_controls_client;
+    gint          sw_claim_clients;
     char         *scope;
     ns_js_log_cb  log_cb;
     gpointer      log_user_data;
@@ -172,6 +174,9 @@ static void ns_sw_post_fetch_request(ns_worker_host *host, guint id,
                                      const char *url, const char *method,
                                      const char *const *headers,
                                      const guint8 *body, gsize body_len);
+static void ns_sw_persist_registration(ns_worker_host *host);
+static JSValue ns_sw_unregister(JSContext *ctx, JSValueConst this_val,
+                                int argc, JSValueConst *argv);
 static void ns_js_flush_document_write(ns_js *js);
 static void ns_js_flush_layout(ns_js *js);
 static void ns_js_drain_deferred_scripts(ns_js *js);
@@ -8164,7 +8169,7 @@ ns_js_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
     }
 
     ns_worker_host *sw = (st->js && !st->js->worker_host)
-        ? ns_sw_controller_for(st->js, send_url) : NULL;
+        ? ns_sw_controller_for(st->js, top) : NULL;
     if (sw) {
         if (!st->id) {
             st->id = ++st->js->next_fetch_id;
@@ -17264,23 +17269,28 @@ ns_attach_body_consumers(JSContext *ctx, JSValueConst obj)
             "      return a; })();"
             " }"
             " function isStream(v){ return v && typeof v.getReader === 'function'; }"
+            " function dropRaw(r){try{if(Object.prototype.hasOwnProperty.call(r,'body'))delete r.body;}catch(e){}}"
             " function normalize(r){"
             "  if (r._bodyBuffer instanceof ArrayBuffer || r._bodyStream) {"
             "   if (!('_bodyNull' in r))"
             "    try { Object.defineProperty(r,'_bodyNull',{value:false,configurable:true}); } catch(e){}"
+            "   dropRaw(r);"
             "   return;"
             "  }"
-            "  if (isStream(r.body)) {"
-            "   try { Object.defineProperty(r,'_bodyStream',{value:r.body,configurable:true}); } catch(e){ r._bodyStream = r.body; }"
+            "  var raw=r.body;"
+            "  if (isStream(raw)) {"
+            "   try { Object.defineProperty(r,'_bodyStream',{value:raw,configurable:true}); } catch(e){ r._bodyStream = raw; }"
             "   try { Object.defineProperty(r,'_bodyNull',{value:false,configurable:true}); } catch(e){}"
+            "   dropRaw(r);"
             "   return;"
             "  }"
-            "  var isNull = (r.body === null || r.body === undefined);"
-            "  var s = (typeof r.body === 'string') ? r.body : (r.body == null ? '' : String(r.body));"
+            "  var isNull = (raw === null || raw === undefined);"
+            "  var s = (typeof raw === 'string') ? raw : (raw == null ? '' : String(raw));"
             "  var u8 = encodeStr(s);"
             "  var ab = new ArrayBuffer(u8.length); new Uint8Array(ab).set(u8);"
             "  try { Object.defineProperty(r,'_bodyBuffer',{value:ab,configurable:true}); } catch(e){ r._bodyBuffer = ab; }"
             "  try { Object.defineProperty(r,'_bodyNull',{value:isNull,configurable:true}); } catch(e){}"
+            "  dropRaw(r);"
             " }"
             " function bytes(r){"
             "  return (r._bodyBuffer instanceof ArrayBuffer)"
@@ -17387,16 +17397,23 @@ ns_body_extract_buffer(JSContext *ctx, JSValueConst body)
 }
 
 static void
+ns_body_set_raw(JSContext *ctx, JSValueConst obj, JSValue value)
+{
+    JS_DefinePropertyValueStr(ctx, obj, "body", value,
+        JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE);
+}
+
+static void
 ns_body_install(JSContext *ctx, JSValueConst obj, JSValueConst body,
                 gboolean null_when_empty)
 {
     if (JS_IsUndefined(body) || JS_IsNull(body)) {
-        JS_SetPropertyStr(ctx, obj, "body",
-                          null_when_empty ? JS_NULL : JS_NewString(ctx, ""));
+        ns_body_set_raw(ctx, obj,
+                        null_when_empty ? JS_NULL : JS_NewString(ctx, ""));
         return;
     }
     if (JS_IsString(body)) {
-        JS_SetPropertyStr(ctx, obj, "body", JS_DupValue(ctx, body));
+        ns_body_set_raw(ctx, obj, JS_DupValue(ctx, body));
         JS_SetPropertyStr(ctx, obj, "_bodyCT",
                           JS_NewString(ctx, "text/plain;charset=UTF-8"));
         return;
@@ -17413,7 +17430,7 @@ ns_body_install(JSContext *ctx, JSValueConst obj, JSValueConst body,
             JS_SetPropertyStr(ctx, obj, "_bodyBuffer",
                 JS_NewArrayBufferCopy(ctx, (const uint8_t *)serialized, blen));
             if (ct) JS_SetPropertyStr(ctx, obj, "_bodyCT", JS_NewString(ctx, ct));
-            JS_SetPropertyStr(ctx, obj, "body", JS_NewString(ctx, ""));
+            ns_body_set_raw(ctx, obj, JS_NewString(ctx, ""));
             g_free(serialized);
             g_free(ct);
             return;
@@ -17423,7 +17440,7 @@ ns_body_install(JSContext *ctx, JSValueConst obj, JSValueConst body,
         JSValue buf = ns_body_extract_buffer(ctx, body);
         if (!JS_IsUndefined(buf)) {
             JS_SetPropertyStr(ctx, obj, "_bodyBuffer", buf);
-            JS_SetPropertyStr(ctx, obj, "body",
+            ns_body_set_raw(ctx, obj,
                 null_when_empty ? JS_DupValue(ctx, body) : JS_NewString(ctx, ""));
             return;
         }
@@ -17444,7 +17461,7 @@ ns_body_install(JSContext *ctx, JSValueConst obj, JSValueConst body,
                     JS_SetPropertyStr(ctx, obj, "_bodyCT", JS_NewString(ctx, ts));
                 if (ts) JS_FreeCString(ctx, ts);
                 JS_FreeValue(ctx, tv);
-                JS_SetPropertyStr(ctx, obj, "body", JS_NewString(ctx, ""));
+                ns_body_set_raw(ctx, obj, JS_NewString(ctx, ""));
                 return;
             }
         }
@@ -17453,7 +17470,7 @@ ns_body_install(JSContext *ctx, JSValueConst obj, JSValueConst body,
         gboolean is_stream = JS_IsFunction(ctx, get_reader);
         JS_FreeValue(ctx, get_reader);
         if (is_stream) {
-            JS_SetPropertyStr(ctx, obj, "body", JS_DupValue(ctx, body));
+            ns_body_set_raw(ctx, obj, JS_DupValue(ctx, body));
             return;
         }
     }
@@ -17462,7 +17479,7 @@ ns_body_install(JSContext *ctx, JSValueConst obj, JSValueConst body,
         JS_FreeValue(ctx, JS_GetException(ctx));
         s = JS_NewString(ctx, "");
     }
-    JS_SetPropertyStr(ctx, obj, "body", s);
+    ns_body_set_raw(ctx, obj, s);
 }
 
 static void
@@ -19059,6 +19076,9 @@ ns_sw_apply_state(JSContext *ctx, ns_worker_host *host, const char *state)
             JS_SetPropertyStr(ctx, reg, "waiting", JS_NULL);
     } else if (strcmp(state, "activated") == 0) {
         g_atomic_int_set(&host->sw_active, 1);
+        if (g_atomic_int_get(&host->sw_claim_clients))
+            g_atomic_int_set(&host->sw_controls_client, 1);
+        ns_sw_persist_registration(host);
         if (JS_IsObject(reg)) {
             JS_SetPropertyStr(ctx, reg, "waiting", JS_NULL);
             JS_SetPropertyStr(ctx, reg, "active", JS_DupValue(ctx, sw));
@@ -19067,16 +19087,20 @@ ns_sw_apply_state(JSContext *ctx, ns_worker_host *host, const char *state)
         JSValue nav = JS_GetPropertyStr(ctx, global, "navigator");
         JSValue container = JS_GetPropertyStr(ctx, nav, "serviceWorker");
         if (JS_IsObject(container)) {
-            JS_SetPropertyStr(ctx, container, "controller", JS_DupValue(ctx, sw));
-            ns_target_fire_event(ctx, container, "controllerchange");
-            JSValue resolve = JS_GetPropertyStr(ctx, container, "_readyResolve");
-            if (JS_IsFunction(ctx, resolve) && JS_IsObject(reg)) {
-                JSValueConst args[1] = { reg };
-                JSValue r = JS_Call(ctx, resolve, JS_UNDEFINED, 1, args);
-                if (JS_IsException(r)) JS_FreeValue(ctx, JS_GetException(ctx));
-                JS_FreeValue(ctx, r);
+            ns_worker_host *controller = ns_sw_controller_for(host->owner,
+                                                               host->owner->current_url);
+            if (controller == host) {
+                JS_SetPropertyStr(ctx, container, "controller", JS_DupValue(ctx, sw));
+                ns_target_fire_event(ctx, container, "controllerchange");
+                JSValue resolve = JS_GetPropertyStr(ctx, container, "_readyResolve");
+                if (JS_IsFunction(ctx, resolve) && JS_IsObject(reg)) {
+                    JSValueConst args[1] = { reg };
+                    JSValue r = JS_Call(ctx, resolve, JS_UNDEFINED, 1, args);
+                    if (JS_IsException(r)) JS_FreeValue(ctx, JS_GetException(ctx));
+                    JS_FreeValue(ctx, r);
+                }
+                JS_FreeValue(ctx, resolve);
             }
-            JS_FreeValue(ctx, resolve);
         }
         JS_FreeValue(ctx, container);
         JS_FreeValue(ctx, nav);
@@ -19681,27 +19705,146 @@ ns_worker_install_location(JSContext *ctx, JSValueConst global, const char *url)
     JS_SetPropertyStr(ctx, global, "location", loc);
 }
 
-static JSValue
-ns_sw_returns_resolved_true(JSContext *ctx, JSValueConst this_val,
-                            int argc, JSValueConst *argv)
+typedef struct {
+    char *script;
+    char *scope;
+} ns_sw_saved;
+
+static void
+ns_sw_saved_free(gpointer data)
 {
-    (void)this_val; (void)argc; (void)argv;
-    return ns_promise_resolve_take(ctx, JS_TRUE);
+    ns_sw_saved *saved = data;
+    if (!saved) return;
+    g_free(saved->script);
+    g_free(saved->scope);
+    g_free(saved);
+}
+
+static char *
+ns_sw_registration_path(const char *origin)
+{
+    if (!origin || !*origin) return NULL;
+    const ns_config *cfg = ns_config_get();
+    if (cfg && cfg->private_mode) return NULL;
+    g_autofree char *hash = g_compute_checksum_for_string(G_CHECKSUM_SHA256,
+                                                          origin, -1);
+    g_autofree char *dir = g_build_filename(g_get_user_data_dir(),
+                                             NS_APP_DIR_NAME,
+                                             "serviceworkers", NULL);
+    g_mkdir_with_parents(dir, 0700);
+    g_chmod(dir, 0700);
+    g_autofree char *file = g_strdup_printf("%s.ini", hash);
+    return g_build_filename(dir, file, NULL);
+}
+
+static char *
+ns_sw_registration_group(const char *scope)
+{
+    g_autofree char *hash = g_compute_checksum_for_string(G_CHECKSUM_SHA256,
+                                                          scope ? scope : "", -1);
+    return g_strconcat("registration-", hash, NULL);
+}
+
+static void
+ns_sw_persist_registration(ns_worker_host *host)
+{
+    if (!host || !host->origin || !host->url || !host->scope) return;
+    g_autofree char *path = ns_sw_registration_path(host->origin);
+    if (!path) return;
+    GKeyFile *kf = g_key_file_new();
+    g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL);
+    g_autofree char *group = ns_sw_registration_group(host->scope);
+    g_key_file_set_string(kf, "meta", "origin", host->origin);
+    g_key_file_set_string(kf, group, "script", host->url);
+    g_key_file_set_string(kf, group, "scope", host->scope);
+    g_key_file_save_to_file(kf, path, NULL);
+    g_key_file_free(kf);
+}
+
+static gboolean
+ns_sw_remove_persisted(const char *origin, const char *scope)
+{
+    g_autofree char *path = ns_sw_registration_path(origin);
+    if (!path) return FALSE;
+    GKeyFile *kf = g_key_file_new();
+    if (!g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL)) {
+        g_key_file_free(kf);
+        return FALSE;
+    }
+    g_autofree char *group = ns_sw_registration_group(scope);
+    gboolean removed = g_key_file_remove_group(kf, group, NULL);
+    if (removed) {
+        gsize count = 0;
+        g_auto(GStrv) groups = g_key_file_get_groups(kf, &count);
+        gboolean has_registration = FALSE;
+        for (gsize i = 0; i < count; i++)
+            if (g_str_has_prefix(groups[i], "registration-")) {
+                has_registration = TRUE;
+                break;
+            }
+        if (has_registration)
+            g_key_file_save_to_file(kf, path, NULL);
+        else
+            g_remove(path);
+    }
+    g_key_file_free(kf);
+    return removed;
+}
+
+static GPtrArray *
+ns_sw_load_persisted(const char *origin)
+{
+    GPtrArray *saved = g_ptr_array_new_with_free_func(ns_sw_saved_free);
+    g_autofree char *path = ns_sw_registration_path(origin);
+    if (!path) return saved;
+    GKeyFile *kf = g_key_file_new();
+    if (!g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL)) {
+        g_key_file_free(kf);
+        return saved;
+    }
+    g_autofree char *stored_origin = g_key_file_get_string(kf, "meta", "origin", NULL);
+    if (g_strcmp0(stored_origin, origin) != 0) {
+        g_key_file_free(kf);
+        return saved;
+    }
+    gsize count = 0;
+    g_auto(GStrv) groups = g_key_file_get_groups(kf, &count);
+    for (gsize i = 0; i < count; i++) {
+        if (!g_str_has_prefix(groups[i], "registration-")) continue;
+        ns_sw_saved *item = g_new0(ns_sw_saved, 1);
+        item->script = g_key_file_get_string(kf, groups[i], "script", NULL);
+        item->scope = g_key_file_get_string(kf, groups[i], "scope", NULL);
+        if (item->script && item->scope &&
+            ns_url_same_origin(item->script, origin) &&
+            ns_url_same_origin(item->scope, origin))
+            g_ptr_array_add(saved, item);
+        else
+            ns_sw_saved_free(item);
+    }
+    g_key_file_free(kf);
+    return saved;
 }
 
 static ns_worker_host *
 ns_sw_controller_for(ns_js *js, const char *abs_url)
 {
     if (!js || !js->workers || !abs_url) return NULL;
+    ns_worker_host *best = NULL;
+    gsize best_len = 0;
     for (guint i = 0; i < js->workers->len; i++) {
         ns_worker_host *h = g_ptr_array_index(js->workers, i);
         if (!h || !h->is_service_worker) continue;
         if (g_atomic_int_get(&h->closing)) continue;
         if (!g_atomic_int_get(&h->sw_active)) continue;
-        if (h->scope && *h->scope && g_str_has_prefix(abs_url, h->scope))
-            return h;
+        if (!g_atomic_int_get(&h->sw_controls_client)) continue;
+        if (!h->scope || !*h->scope) continue;
+        gsize scope_len = strlen(h->scope);
+        if (scope_len >= best_len && g_str_has_prefix(abs_url, h->scope)) {
+            best = h;
+            best_len = scope_len;
+        }
     }
-    return NULL;
+    return best;
 }
 
 typedef struct {
@@ -19940,6 +20083,17 @@ ns_sw_post_fetch_request(ns_worker_host *host, guint id,
                                ns_sw_dispatch_fetch_on_worker, r, NULL);
 }
 
+static JSValue
+ns_sw_clients_claim(JSContext *ctx, JSValueConst this_val,
+                    int argc, JSValueConst *argv)
+{
+    (void)this_val; (void)argc; (void)argv;
+    ns_js *js = js_from_ctx(ctx);
+    if (js && js->worker_host)
+        g_atomic_int_set(&js->worker_host->sw_claim_clients, 1);
+    return ns_promise_resolve_take(ctx, JS_UNDEFINED);
+}
+
 static void
 ns_sw_install_scope(JSContext *ctx, JSValueConst global, ns_worker_host *host)
 {
@@ -19963,7 +20117,7 @@ ns_sw_install_scope(JSContext *ctx, JSValueConst global, ns_worker_host *host)
     ns_bind_event_target_listeners(ctx, reg);
     ns_bind_fn(ctx, reg, "dispatchEvent", ns_target_dispatchEvent, 1);
     ns_bind_fn(ctx, reg, "update",     ns_returns_resolved_undefined, 0);
-    ns_bind_fn(ctx, reg, "unregister", ns_sw_returns_resolved_true, 0);
+    ns_bind_fn(ctx, reg, "unregister", ns_sw_unregister, 0);
     JS_SetPropertyStr(ctx, reg, "onupdatefound", JS_NULL);
     JSValue np = JS_NewObject(ctx);
     ns_bind_fn(ctx, np, "enable",         ns_returns_resolved_undefined, 0);
@@ -19974,7 +20128,7 @@ ns_sw_install_scope(JSContext *ctx, JSValueConst global, ns_worker_host *host)
     JS_SetPropertyStr(ctx, global, "registration", reg);
 
     JSValue clients = JS_NewObject(ctx);
-    ns_bind_fn(ctx, clients, "claim",      ns_returns_resolved_undefined, 0);
+    ns_bind_fn(ctx, clients, "claim",      ns_sw_clients_claim, 0);
     ns_bind_fn(ctx, clients, "matchAll",   ns_returns_resolved_empty_array, 1);
     ns_bind_fn(ctx, clients, "get",        ns_returns_resolved_undefined, 1);
     ns_bind_fn(ctx, clients, "openWindow", ns_returns_resolved_undefined, 1);
@@ -20497,6 +20651,219 @@ ns_sw_default_scope(const char *abs_url)
 }
 
 static JSValue
+ns_sw_registration_for_scope(JSContext *ctx, JSValueConst container,
+                             const char *scope)
+{
+    JSValue regs = JS_GetPropertyStr(ctx, container, "_registrations");
+    JSValue found = JS_UNDEFINED;
+    if (JS_IsArray(regs)) {
+        uint32_t n = ns_js_array_length(ctx, regs);
+        for (uint32_t i = 0; i < n; i++) {
+            JSValue reg = JS_GetPropertyUint32(ctx, regs, i);
+            JSValue sv = JS_GetPropertyStr(ctx, reg, "scope");
+            const char *s = JS_IsString(sv) ? JS_ToCString(ctx, sv) : NULL;
+            gboolean match = s && g_strcmp0(s, scope) == 0;
+            if (s) JS_FreeCString(ctx, s);
+            JS_FreeValue(ctx, sv);
+            if (match) {
+                found = reg;
+                break;
+            }
+            JS_FreeValue(ctx, reg);
+        }
+    }
+    JS_FreeValue(ctx, regs);
+    return found;
+}
+
+static JSValue
+ns_sw_unregister(JSContext *ctx, JSValueConst this_val,
+                 int argc, JSValueConst *argv)
+{
+    (void)argc; (void)argv;
+    JSValue scope_v = JS_GetPropertyStr(ctx, this_val, "scope");
+    const char *scope_s = JS_IsString(scope_v) ? JS_ToCString(ctx, scope_v) : NULL;
+    char *scope = scope_s ? g_strdup(scope_s) : NULL;
+    if (scope_s) JS_FreeCString(ctx, scope_s);
+    JS_FreeValue(ctx, scope_v);
+    gboolean removed = FALSE;
+    ns_js *js = js_from_ctx(ctx);
+    if (js && js->workers && scope) {
+        for (guint i = 0; i < js->workers->len; i++) {
+            ns_worker_host *host = g_ptr_array_index(js->workers, i);
+            if (!host || !host->is_service_worker ||
+                g_strcmp0(host->scope, scope) != 0)
+                continue;
+            g_atomic_int_set(&host->owner_alive, 0);
+            host->owner = NULL;
+            host->owner_ctx = NULL;
+            host->log_cb = NULL;
+            host->log_user_data = NULL;
+            ns_worker_host_stop(host, TRUE);
+            if (!JS_IsUndefined(host->owner_obj)) {
+                JS_SetOpaque(host->owner_obj, NULL);
+                JS_FreeValue(ctx, host->owner_obj);
+                host->owner_obj = JS_UNDEFINED;
+            }
+            g_ptr_array_remove_index(js->workers, i);
+            ns_worker_host_unref(host);
+            removed = TRUE;
+            break;
+        }
+    }
+
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue nav = JS_GetPropertyStr(ctx, global, "navigator");
+    JSValue container = JS_GetPropertyStr(ctx, nav, "serviceWorker");
+    JSValue regs = JS_GetPropertyStr(ctx, container, "_registrations");
+    if (JS_IsArray(regs)) {
+        JSValue kept = JS_NewArray(ctx);
+        uint32_t n = ns_js_array_length(ctx, regs), out = 0;
+        for (uint32_t i = 0; i < n; i++) {
+            JSValue reg = JS_GetPropertyUint32(ctx, regs, i);
+            if (JS_IsStrictEqual(ctx, reg, this_val)) {
+                removed = TRUE;
+                JS_FreeValue(ctx, reg);
+            } else {
+                JS_SetPropertyUint32(ctx, kept, out++, reg);
+            }
+        }
+        JS_SetPropertyStr(ctx, container, "_registrations", kept);
+    }
+    JS_FreeValue(ctx, regs);
+    JS_FreeValue(ctx, container);
+    JS_FreeValue(ctx, nav);
+    JS_FreeValue(ctx, global);
+
+    g_autofree char *origin = scope ? ns_url_origin_from(scope) : NULL;
+    if (scope && ns_sw_remove_persisted(origin, scope)) removed = TRUE;
+    g_free(scope);
+    return ns_promise_resolve_take(ctx, JS_NewBool(ctx, removed));
+}
+
+static JSValue
+ns_sw_start_registration(JSContext *ctx, JSValueConst container, ns_js *js,
+                         const char *abs_url, const char *scope,
+                         gboolean fire_update)
+{
+    ns_new_class_id(&ns_worker_class_id);
+    JS_NewClass(JS_GetRuntime(ctx), ns_worker_class_id, &ns_worker_class);
+
+    JSValue sw = JS_NewObjectClass(ctx, ns_worker_class_id);
+    JS_SetPropertyStr(ctx, sw, "scriptURL",     JS_NewString(ctx, abs_url));
+    JS_SetPropertyStr(ctx, sw, "state",         JS_NewString(ctx, "installing"));
+    JS_SetPropertyStr(ctx, sw, "onstatechange", JS_NULL);
+    JS_SetPropertyStr(ctx, sw, "onerror",       JS_NULL);
+    JS_SetPropertyStr(ctx, sw, "_listeners",    JS_NewArray(ctx));
+    ns_bind_event_target_listeners(ctx, sw);
+    ns_bind_fn(ctx, sw, "dispatchEvent", ns_target_dispatchEvent, 1);
+    ns_bind_fn(ctx, sw, "postMessage",   ns_worker_post_message, 1);
+
+    JSValue reg = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, reg, "scope",          JS_NewString(ctx, scope));
+    JS_SetPropertyStr(ctx, reg, "installing",     JS_DupValue(ctx, sw));
+    JS_SetPropertyStr(ctx, reg, "waiting",        JS_NULL);
+    JS_SetPropertyStr(ctx, reg, "active",         JS_NULL);
+    JS_SetPropertyStr(ctx, reg, "updateViaCache", JS_NewString(ctx, "imports"));
+    JS_SetPropertyStr(ctx, reg, "_scriptURL",     JS_NewString(ctx, abs_url));
+    JS_SetPropertyStr(ctx, reg, "_listeners",     JS_NewArray(ctx));
+    ns_bind_event_target_listeners(ctx, reg);
+    ns_bind_fn(ctx, reg, "dispatchEvent", ns_target_dispatchEvent, 1);
+    ns_bind_fn(ctx, reg, "update",        ns_returns_resolved_undefined, 0);
+    ns_bind_fn(ctx, reg, "unregister",    ns_sw_unregister, 0);
+    JS_SetPropertyStr(ctx, reg, "onupdatefound", JS_NULL);
+    JS_SetPropertyStr(ctx, sw, "_registration", JS_DupValue(ctx, reg));
+
+    JSValue regs = JS_GetPropertyStr(ctx, container, "_registrations");
+    if (JS_IsArray(regs)) {
+        uint32_t n = ns_js_array_length(ctx, regs);
+        JS_SetPropertyUint32(ctx, regs, n, JS_DupValue(ctx, reg));
+    }
+    JS_FreeValue(ctx, regs);
+
+    ns_worker_host *host = g_new0(ns_worker_host, 1);
+    g_atomic_int_set(&host->ref_count, 1);
+    g_atomic_int_set(&host->owner_alive, 1);
+    g_mutex_init(&host->lock);
+    host->owner = js;
+    host->owner_ctx = ctx;
+    host->owner_obj = JS_DupValue(ctx, sw);
+    host->context = g_main_context_new();
+    host->url = g_strdup(abs_url);
+    host->base_url = g_strdup(js->current_url ? js->current_url : abs_url);
+    host->name = g_strdup("");
+    host->is_service_worker = TRUE;
+    g_atomic_int_set(&host->sw_controls_client, !fire_update);
+    host->scope = g_strdup(scope);
+    host->origin = ns_url_origin_from(host->base_url);
+    if (!host->origin) host->origin = g_strdup("");
+    host->log_cb = js->log_cb;
+    host->log_user_data = js->log_user_data;
+    JS_SetOpaque(sw, host);
+
+    if (!js->workers) js->workers = g_ptr_array_new();
+    g_ptr_array_add(js->workers, host);
+    host->thread = g_thread_new("nd-service-worker", ns_worker_thread,
+                                ns_worker_host_ref(host));
+    if (fire_update) ns_target_fire_event(ctx, reg, "updatefound");
+    JS_FreeValue(ctx, sw);
+    return reg;
+}
+
+static void
+ns_sw_prepare_document(ns_js *js)
+{
+    if (!js || !js->ctx || js->worker_host) return;
+    JSContext *ctx = js->ctx;
+    if (js->workers) {
+        for (gint i = (gint)js->workers->len - 1; i >= 0; i--) {
+            ns_worker_host *host = g_ptr_array_index(js->workers, (guint)i);
+            if (!host || !host->is_service_worker) continue;
+            g_atomic_int_set(&host->owner_alive, 0);
+            host->owner = NULL;
+            host->owner_ctx = NULL;
+            host->log_cb = NULL;
+            host->log_user_data = NULL;
+            ns_worker_host_stop(host, TRUE);
+            if (!JS_IsUndefined(host->owner_obj)) {
+                JS_SetOpaque(host->owner_obj, NULL);
+                JS_FreeValue(ctx, host->owner_obj);
+                host->owner_obj = JS_UNDEFINED;
+            }
+            g_ptr_array_remove_index(js->workers, (guint)i);
+            ns_worker_host_unref(host);
+        }
+    }
+
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue navigator = JS_GetPropertyStr(ctx, global, "navigator");
+    JSValue container = JS_GetPropertyStr(ctx, navigator, "serviceWorker");
+    if (JS_IsObject(container)) {
+        JS_SetPropertyStr(ctx, container, "controller", JS_NULL);
+        JS_SetPropertyStr(ctx, container, "_registrations", JS_NewArray(ctx));
+        JSValue resolvers[2];
+        JSValue ready = JS_NewPromiseCapability(ctx, resolvers);
+        JS_SetPropertyStr(ctx, container, "ready", ready);
+        JS_SetPropertyStr(ctx, container, "_readyResolve", resolvers[0]);
+        JS_FreeValue(ctx, resolvers[1]);
+
+        g_autofree char *origin = ns_url_origin_from(js->current_url);
+        GPtrArray *saved = ns_sw_load_persisted(origin);
+        for (guint i = 0; i < saved->len; i++) {
+            ns_sw_saved *item = g_ptr_array_index(saved, i);
+            JSValue reg = ns_sw_start_registration(ctx, container, js,
+                                                   item->script, item->scope,
+                                                   FALSE);
+            JS_FreeValue(ctx, reg);
+        }
+        g_ptr_array_free(saved, TRUE);
+    }
+    JS_FreeValue(ctx, container);
+    JS_FreeValue(ctx, navigator);
+    JS_FreeValue(ctx, global);
+}
+
+static JSValue
 ns_sw_register(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     ns_js *js = js_from_ctx(ctx);
@@ -20550,71 +20917,28 @@ ns_sw_register(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *ar
                             "blocked by Content-Security-Policy worker-src");
     }
 
-    ns_new_class_id(&ns_worker_class_id);
-    JS_NewClass(JS_GetRuntime(ctx), ns_worker_class_id, &ns_worker_class);
-
-    JSValue sw = JS_NewObjectClass(ctx, ns_worker_class_id);
-    JS_SetPropertyStr(ctx, sw, "scriptURL",     JS_NewString(ctx, abs_url));
-    JS_SetPropertyStr(ctx, sw, "state",         JS_NewString(ctx, "installing"));
-    JS_SetPropertyStr(ctx, sw, "onstatechange", JS_NULL);
-    JS_SetPropertyStr(ctx, sw, "onerror",       JS_NULL);
-    JS_SetPropertyStr(ctx, sw, "_listeners",    JS_NewArray(ctx));
-    ns_bind_event_target_listeners(ctx, sw);
-    ns_bind_fn(ctx, sw, "dispatchEvent", ns_target_dispatchEvent, 1);
-    ns_bind_fn(ctx, sw, "postMessage",   ns_worker_post_message, 1);
-
-    JSValue reg = JS_NewObject(ctx);
-    JS_SetPropertyStr(ctx, reg, "scope",          JS_NewString(ctx, scope));
-    JS_SetPropertyStr(ctx, reg, "installing",     JS_DupValue(ctx, sw));
-    JS_SetPropertyStr(ctx, reg, "waiting",        JS_NULL);
-    JS_SetPropertyStr(ctx, reg, "active",         JS_NULL);
-    JS_SetPropertyStr(ctx, reg, "updateViaCache", JS_NewString(ctx, "imports"));
-    JS_SetPropertyStr(ctx, reg, "_listeners",     JS_NewArray(ctx));
-    ns_bind_event_target_listeners(ctx, reg);
-    ns_bind_fn(ctx, reg, "dispatchEvent", ns_target_dispatchEvent, 1);
-    ns_bind_fn(ctx, reg, "update",        ns_returns_resolved_undefined, 0);
-    ns_bind_fn(ctx, reg, "unregister",    ns_sw_returns_resolved_true, 0);
-    JS_SetPropertyStr(ctx, reg, "onupdatefound", JS_NULL);
-    JS_SetPropertyStr(ctx, sw, "_registration", JS_DupValue(ctx, reg));
-
-    JSValue regs = JS_GetPropertyStr(ctx, this_val, "_registrations");
-    if (JS_IsArray(regs)) {
-        uint32_t n = ns_js_array_length(ctx, regs);
-        JS_SetPropertyUint32(ctx, regs, n, JS_DupValue(ctx, reg));
+    JSValue existing = ns_sw_registration_for_scope(ctx, this_val, scope);
+    if (JS_IsObject(existing)) {
+        JSValue script_v = JS_GetPropertyStr(ctx, existing, "_scriptURL");
+        const char *script = JS_IsString(script_v) ? JS_ToCString(ctx, script_v) : NULL;
+        gboolean same = script && g_strcmp0(script, abs_url) == 0;
+        if (script) JS_FreeCString(ctx, script);
+        JS_FreeValue(ctx, script_v);
+        if (same) {
+            g_free(abs_url);
+            g_free(scope);
+            return ns_promise_resolve_take(ctx, existing);
+        }
+        JSValue removed = ns_sw_unregister(ctx, existing, 0, NULL);
+        JS_FreeValue(ctx, removed);
+        JS_FreeValue(ctx, existing);
     }
-    JS_FreeValue(ctx, regs);
-
-    ns_worker_host *host = g_new0(ns_worker_host, 1);
-    g_atomic_int_set(&host->ref_count, 1);
-    g_atomic_int_set(&host->owner_alive, 1);
-    g_mutex_init(&host->lock);
-    host->owner = js;
-    host->owner_ctx = ctx;
-    host->owner_obj = JS_DupValue(ctx, sw);
-    host->context = g_main_context_new();
-    host->url = g_strdup(abs_url);
-    host->base_url = g_strdup(js->current_url ? js->current_url : abs_url);
-    host->name = g_strdup("");
-    host->is_service_worker = TRUE;
-    host->scope = g_strdup(scope);
-    host->origin = ns_url_origin_from(host->base_url);
-    if (!host->origin) host->origin = g_strdup("");
-    host->log_cb = js->log_cb;
-    host->log_user_data = js->log_user_data;
-    JS_SetOpaque(sw, host);
-
-    if (!js->workers) js->workers = g_ptr_array_new();
-    g_ptr_array_add(js->workers, host);
-    host->thread = g_thread_new("nd-service-worker", ns_worker_thread,
-                                ns_worker_host_ref(host));
-
-    ns_target_fire_event(ctx, reg, "updatefound");
-
+    JSValue reg = ns_sw_start_registration(ctx, this_val, js, abs_url, scope,
+                                           TRUE);
     g_free(abs_url);
     g_free(scope);
     JSValue ret = ns_promise_resolve_take(ctx, JS_DupValue(ctx, reg));
     JS_FreeValue(ctx, reg);
-    JS_FreeValue(ctx, sw);
     return ret;
 }
 
@@ -20639,13 +20963,35 @@ static JSValue
 ns_sw_get_registration(JSContext *ctx, JSValueConst this_val,
                        int argc, JSValueConst *argv)
 {
+    ns_js *js = js_from_ctx(ctx);
+    const char *raw = NULL;
+    if (argc > 0 && !JS_IsUndefined(argv[0])) raw = JS_ToCString(ctx, argv[0]);
+    char *client_url = raw
+        ? ns_url_resolve(js && js->current_url ? js->current_url : NULL, raw)
+        : g_strdup(js && js->current_url ? js->current_url : "");
+    if (raw) JS_FreeCString(ctx, raw);
     JSValue regs = JS_GetPropertyStr(ctx, this_val, "_registrations");
     JSValue found = JS_UNDEFINED;
+    gsize best = 0;
     if (JS_IsArray(regs)) {
         uint32_t n = ns_js_array_length(ctx, regs);
-        if (n > 0) found = JS_GetPropertyUint32(ctx, regs, n - 1);
+        for (uint32_t i = 0; i < n; i++) {
+            JSValue reg = JS_GetPropertyUint32(ctx, regs, i);
+            JSValue sv = JS_GetPropertyStr(ctx, reg, "scope");
+            const char *scope = JS_IsString(sv) ? JS_ToCString(ctx, sv) : NULL;
+            gsize len = scope ? strlen(scope) : 0;
+            if (client_url && scope && len >= best &&
+                g_str_has_prefix(client_url, scope)) {
+                JS_FreeValue(ctx, found);
+                found = JS_DupValue(ctx, reg);
+                best = len;
+            }
+            if (scope) JS_FreeCString(ctx, scope);
+            JS_FreeValue(ctx, sv);
+            JS_FreeValue(ctx, reg);
+        }
     }
-    (void)argc; (void)argv;
+    g_free(client_url);
     JS_FreeValue(ctx, regs);
     return ns_promise_resolve_take(ctx, found);
 }
@@ -20673,7 +21019,8 @@ ns_sw_install_container(JSContext *ctx, JSValueConst navigator)
     JS_SetPropertyStr(ctx, container, "_readyResolve", resolvers[0]);
     JS_FreeValue(ctx, resolvers[1]);
 
-    JS_SetPropertyStr(ctx, navigator, "serviceWorker", container);
+    JS_SetPropertyStr(ctx, navigator, "serviceWorker", JS_DupValue(ctx, container));
+    JS_FreeValue(ctx, container);
 }
 
 static JSClassID ns_mut_observer_class_id;
@@ -40567,9 +40914,9 @@ ns_js_new(ns_js_log_cb log_cb, gpointer log_user_data,
     ns_bind_fn(ctx, navigator, "clearAppBadge",
                ns_returns_resolved_undefined, 0);
 
+    JS_SetPropertyStr(ctx, global, "navigator", JS_DupValue(ctx, navigator));
     ns_sw_install_container(ctx, navigator);
-
-    JS_SetPropertyStr(ctx, global, "navigator", navigator);
+    JS_FreeValue(ctx, navigator);
 
     if (nav_chrome_compat)
         ns_install_window_chrome(ctx, global);
@@ -44213,6 +44560,7 @@ ns_js_install_document(ns_js *js, ns_node *doc, const char *base_url)
 
     JSContext *ctx = js->ctx;
     JSValue global = JS_GetGlobalObject(ctx);
+    ns_sw_prepare_document(js);
 
     JSValue document = JS_NewObjectClass(ctx, ns_element_class_id);
     if (js->current_doc) JS_SetOpaque(document, js->current_doc);
