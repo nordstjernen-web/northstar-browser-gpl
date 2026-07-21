@@ -5086,6 +5086,32 @@ ns_fetch_sync(const char *url, const char *top_url, const char *method,
               GPtrArray *extra_headers,
               GCancellable *cancellable, GError **error)
 {
+    GBytes *extension_bytes = NULL;
+    char *extension_type = NULL;
+    char *extension_error = NULL;
+    if (ns_ext_resource_load(url, &extension_bytes, &extension_type,
+                             &extension_error)) {
+        ns_response *extension = g_new0(ns_response, 1);
+        extension->final_url = g_strdup(url);
+        extension->body = g_byte_array_new();
+        if (extension_bytes) {
+            gsize extension_len = 0;
+            const guint8 *extension_data = g_bytes_get_data(extension_bytes,
+                                                             &extension_len);
+            g_byte_array_append(extension->body, extension_data, extension_len);
+            extension->status = 200;
+            extension->content_type = extension_type;
+            extension->cors_allow_origin = g_strdup("*");
+            extension_type = NULL;
+            g_bytes_unref(extension_bytes);
+        } else {
+            extension->error = extension_error;
+            extension_error = NULL;
+        }
+        g_free(extension_type);
+        g_free(extension_error);
+        return extension;
+    }
     if (!ns_fetch_is_navigation(top_url, extra_headers) &&
         ns_ext_should_block(url, top_url)) {
         ns_response *blocked = g_new0(ns_response, 1);

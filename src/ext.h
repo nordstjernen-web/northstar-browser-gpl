@@ -14,6 +14,8 @@ G_BEGIN_DECLS
 char    *ns_ext_content_scripts_for_url(JSContext *ctx, JSValueConst global,
                                         const char *url, gboolean at_start);
 gboolean ns_ext_should_block(const char *url, const char *initiator);
+gboolean ns_ext_resource_load(const char *url, GBytes **bytes,
+                              char **content_type, char **error);
 guint    ns_ext_count(void);
 
 G_END_DECLS

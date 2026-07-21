@@ -8151,7 +8151,8 @@ ns_js_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
     gboolean blocked_mixed = top &&
         g_ascii_strncasecmp(top, "https://", 8) == 0 &&
         g_ascii_strncasecmp(send_url, "http://", 7) == 0;
-    gboolean blocked_csp = st->js && st->js->csp &&
+    gboolean blocked_csp = !g_str_has_prefix(send_url, "northstar-extension:") &&
+        st->js && st->js->csp &&
         !ns_csp_allows(st->js->csp, NS_CSP_CONNECT, send_url, top);
     if (blocked_mixed || blocked_csp) {
         ns_response *resp = g_new0(ns_response, 1);
