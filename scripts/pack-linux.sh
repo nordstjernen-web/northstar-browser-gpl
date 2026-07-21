@@ -27,13 +27,6 @@ if [ ! -d "$BUILDDIR" ]; then
 fi
 meson compile -C "$BUILDDIR" ${NS_BUILD_JOBS:+-j "$NS_BUILD_JOBS"}
 strip --strip-all "$BUILDDIR/src/gtk/northstar"
-# The audio playback helper (MP2/MP3 decode + SDL2 output). Built only when
-# SDL2 was present at configure time (meson 'audio' feature is auto); ship it
-# beside the main binary so the shell can spawn it for <audio> sound.
-AUDIO_BIN="$BUILDDIR/src/northstar-audio"
-if [ -f "$AUDIO_BIN" ]; then
-    strip --strip-all "$AUDIO_BIN"
-fi
 
 LOADER=$(ldd "$BUILDDIR/src/gtk/northstar" 2>/dev/null \
     | grep -m1 -oE 'ld-(musl|linux)[^ ]*' || true)
@@ -65,9 +58,6 @@ fi
 rm -rf "$STAGE"
 mkdir -p "$STAGE/data/icons/hicolor/scalable/apps"
 cp "$BUILDDIR/src/gtk/northstar" "$STAGE/"
-if [ -f "$AUDIO_BIN" ]; then
-    cp "$AUDIO_BIN" "$STAGE/"
-fi
 cp "$ROOT"/data/icons/hicolor/scalable/apps/northstar*.svg \
    "$ROOT"/data/icons/hicolor/scalable/apps/northstar.gif \
    "$STAGE/data/icons/hicolor/scalable/apps/"
@@ -99,7 +89,7 @@ ${LIBC_REQ}
 - librsvg (SVG rendering)
 - libavif 16 (AVIF images — only in recent distro releases)
 - libpsl, libseccomp, libsqlite3
-- SDL2 (audio playback helper)
+- SDL2 (in-process audio playback)
 - fontconfig + a font set; harfbuzz; freetype; libstdc++
 - ca-certificates (TLS trust store)
 - An X11 or Wayland session

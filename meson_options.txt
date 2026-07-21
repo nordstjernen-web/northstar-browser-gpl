@@ -5,4 +5,4 @@ option('gtk', type: 'feature', value: 'auto',
 option('wasm', type: 'feature', value: 'auto',
        description: 'Build the WebAssembly JS API over the vendored WAMR interpreter (on by default; disable on platforms WAMR does not support, e.g. NetBSD).')
 option('audio', type: 'feature', value: 'auto',
-       description: 'Build the northstar-audio playback helper (SDL2 output + minimp3/pl_mpeg decode). Auto-detects SDL2; disable for engine-only or JNI builds without SDL2.')
+       description: 'Enable in-process audio playback (SDL2 output + minimp3/pl_mpeg decode). Auto-detects SDL2; disable for engine-only builds without SDL2.')

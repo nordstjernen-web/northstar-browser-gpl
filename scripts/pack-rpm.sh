@@ -44,18 +44,6 @@ cp "$ROOT/README.md" "$RPMTOP/SOURCES/"
 cp "$ROOT/THIRD-PARTY-LICENSES.md" "$RPMTOP/SOURCES/"
 cp "$ROOT/LICENSE" "$RPMTOP/SOURCES/"
 
-# Audio playback helper, when SDL2 was available at build time. AutoReqProv
-# picks up its libSDL2 SONAME as a Requires automatically.
-AUDIO_SOURCE=""
-AUDIO_INSTALL=""
-AUDIO_FILES=""
-if [ -x "$STAGE/northstar-audio" ]; then
-    cp "$STAGE/northstar-audio" "$RPMTOP/SOURCES/"
-    AUDIO_SOURCE="Source7:        northstar-audio"
-    AUDIO_INSTALL='install -m755 %{SOURCE7} %{buildroot}%{_bindir}/northstar-audio'
-    AUDIO_FILES='%{_bindir}/northstar-audio'
-fi
-
 SPEC="$RPMTOP/SPECS/northstar.spec"
 cat > "$SPEC" <<SPEC_EOF
 Name:           northstar
@@ -73,7 +61,6 @@ Source2:        northstar.desktop
 Source3:        README.md
 Source4:        THIRD-PARTY-LICENSES.md
 Source5:        LICENSE
-${AUDIO_SOURCE}
 
 AutoReqProv:    yes
 
@@ -109,14 +96,12 @@ install -m644 %{SOURCE2} %{buildroot}%{_datadir}/applications/org.northstar.WebB
 install -m644 %{SOURCE3} %{buildroot}%{_docdir}/northstar/
 install -m644 %{SOURCE4} %{buildroot}%{_docdir}/northstar/
 install -m644 %{SOURCE5} %{buildroot}%{_docdir}/northstar/
-${AUDIO_INSTALL}
 
 %files
 %{_bindir}/northstar
 %{_datadir}/icons/hicolor/scalable/apps/northstar*
 %{_datadir}/applications/org.northstar.WebBrowser.desktop
 %{_docdir}/northstar/
-${AUDIO_FILES}
 
 %post
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then

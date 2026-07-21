@@ -18,11 +18,11 @@ per-origin renderer process; every page shares one address space.
  browser process  (src/gtk/ shell + engine, single-process)
     │   ├─ GTK 4 UI: window, tabs, omnibox, menus   (src/gtk/*.c)
     │   ├─ engine: fetch → parse → style → layout → paint
-    │   └─ QuickJS runtime(s), one per page/tab
+    │   ├─ QuickJS runtime(s), one per page/tab
+    │   └─ asynchronous audio worker           (src/audio/audio.c)
+    │          <audio> decode (minimp3 / pl_mpeg / opus / vorbis) → SDL2
     │
-    └─ spawns child: northstar-audio  (src/audio/main.c)
-           <audio> decode (minimp3 / pl_mpeg / opus / vorbis) → SDL2
-           driven over stdin/stdout; commands ride the X-Audio channel
+    └─ no renderer or media child processes
 ```
 
 - **Watchdog supervisor** (`watchdog.c`) — a normal GUI launch first
@@ -32,9 +32,9 @@ per-origin renderer process; every page shares one address space.
 - **Browser process** — the GTK 4 shell (`src/gtk/`) hosts the engine
   directly. `ns_rproc_single_process_enable()` (`rproc_inproc.c`) wires
   the in-process render path so no renderer subprocess is spawned.
-- **Audio helper** (`northstar-audio`, `src/audio/main.c`) — the only
-  child process. It decodes `<audio>` in-tree and outputs through SDL2.
-  `<video>` lays out but is not decoded in this edition.
+- **Audio mixer** (`src/audio/audio.c`) — downloads and decodes `<audio>`
+  on an in-process worker thread, then outputs through SDL2. Per-view audio
+  contexts keep page state separate. `<video>` lays out but is not decoded.
 
 A single internal HTTP/JSON request protocol (`renderer_serve.c`,
 `rproc_http.c`) still describes each render as a request/response; in

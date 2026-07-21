@@ -30,8 +30,8 @@ only the `linux.yml` (gcc) and `windows.yml` CI workflows remain.
   far as is feasible without bloat.
 - **No** AI-style web APIs, **no** WebGL, **no** WebGPU.
 - **Media.** There is no inline video: a `<video>` element lays out but
-  does not decode in this edition. Audio does play, through the
-  unsandboxed `northstar-audio` helper (`src/audio/main.c`), which decodes
+  does not decode in this edition. Audio plays in the browser process through
+  the asynchronous mixer (`src/audio/audio.c`), which decodes
   in-tree — the vendored CC0 [minimp3](https://github.com/lieff/minimp3)
   (`src/audio/minimp3.h`) for `.mp3`, the vendored MIT
   [pl_mpeg](https://github.com/phoboslab/pl_mpeg) (`subprojects/plmpeg/`)
@@ -143,7 +143,7 @@ sudo apt install build-essential pkg-config meson ninja-build \
 
 Optional: `libenchant-2-dev` (plus a dictionary such as `hunspell-en-us`)
 enables on-screen spell-checking; `opusfile` / `vorbisfile` add native Ogg
-Opus/Vorbis decode to the audio helper. Both are auto-detected.
+Opus/Vorbis decode to the in-process mixer. Both are auto-detected.
 
 `libseccomp` is required on Linux — `meson setup` fails without it.
 On Windows it is not used and the syscall filter is a no-op.

@@ -37,11 +37,6 @@ install -dm755 "$PKGROOT/usr/share/northstar"
 install -dm755 "$PKGROOT/usr/share/doc/northstar"
 
 install -m755 "$STAGE/northstar" "$PKGROOT/usr/bin/northstar"
-# Audio playback helper, when SDL2 was available at build time. It is added to
-# the dpkg-shlibdeps scan below so its libSDL2 dependency lands in Depends.
-if [ -x "$STAGE/northstar-audio" ]; then
-    install -m755 "$STAGE/northstar-audio" "$PKGROOT/usr/bin/northstar-audio"
-fi
 # All app + toolbar icons the UI and about: pages look up by name.
 for icon in "$ROOT"/data/icons/hicolor/scalable/apps/northstar*.svg \
             "$ROOT"/data/icons/hicolor/scalable/apps/northstar.gif; do
@@ -128,7 +123,7 @@ fi
 
 INSTALLED_KB=$(du -sk "$PKGROOT/usr" | cut -f1)
 
-FALLBACK_DEPS="libgtk-4-1, libcurl4 | libcurl4t64, libuchardet0, librsvg2-2, libpsl5 | libpsl5t64, libsqlite3-0, libseccomp2, libfontconfig1"
+FALLBACK_DEPS="libgtk-4-1, libcurl4 | libcurl4t64, libuchardet0, librsvg2-2, libpsl5 | libpsl5t64, libsqlite3-0, libseccomp2, libfontconfig1, libsdl2-2.0-0"
 
 RUNTIME_DEPS=""
 if command -v dpkg-shlibdeps >/dev/null 2>&1; then
@@ -140,7 +135,6 @@ Package: northstar
 Architecture: any
 CTL
     scan_bins=(usr/bin/northstar)
-    [ -x "$PKGROOT/usr/bin/northstar-audio" ] && scan_bins+=(usr/bin/northstar-audio)
     RUNTIME_DEPS=$(cd "$PKGROOT" \
         && dpkg-shlibdeps -O --ignore-missing-info "${scan_bins[@]}" 2>/dev/null \
         | sed -n 's/^shlibs:Depends=//p')

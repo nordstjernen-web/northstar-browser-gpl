@@ -165,10 +165,10 @@ void ns_browser_scrollbar_release(ns_browser *browser);
 int ns_browser_drop_files(ns_browser *browser, int x, int y,
                           const char *const *paths, int n_paths);
 
-/* Audio playback bridge to the northstar-audio helper. The renderer queues
+/* Audio playback bridge to the browser mixer. The renderer queues
  * commands (open/play/pause/seek/volume/stop, one per line) when page script
  * drives <audio>/<video>; the shell drains them with take_pending_audio and
- * relays them to the helper. */
+ * relays them to the mixer. */
 char *ns_browser_take_pending_audio(ns_browser *browser);
 
 /* DevTools console: drain accumulated console.log/warn/error/info/debug output

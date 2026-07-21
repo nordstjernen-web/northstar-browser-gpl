@@ -5,6 +5,7 @@
 
 #include "procwindow.h"
 #include <glib/gstdio.h>
+#include "audio/audio.h"
 #include "procview.h"
 #include "i18n.h"
 #include "rproc_http.h"
@@ -1268,16 +1269,6 @@ task_mgr_refresh(NsTaskMgr *tm)
                          rss, v);
         g_free(name);
 
-        int apid = ns_proc_view_audio_pid(v);
-        if (apid > 0) {
-            char astate[32] = "";
-            long arss = -1;
-            ns_rproc_http_proc_info(apid, astate, sizeof astate, &arss);
-            char *aname = g_strdup_printf("   ⤷ %s", ns_i18n("Audio playback"));
-            task_mgr_add_row(tm, "audio-volume-high-symbolic", aname, apid,
-                             astate, arss, v);
-            g_free(aname);
-        }
     }
 
     if (selected_pid > 0) {
@@ -1309,14 +1300,8 @@ task_mgr_end_task(GtkButton *button, gpointer data)
     NsTaskMgr *tm = data;
     GtkListBoxRow *row = gtk_list_box_get_selected_row(GTK_LIST_BOX(tm->list));
     NsProcView *v = row ? g_object_get_data(G_OBJECT(row), "ns-view") : NULL;
-    int pid = row ? GPOINTER_TO_INT(g_object_get_data(G_OBJECT(row), "ns-pid"))
-                  : 0;
-    if (v) {
-        if (pid > 0 && pid == ns_proc_view_audio_pid(v))
-            ns_proc_view_stop_audio(v);
-        else
-            ns_proc_view_end_task(v);
-    }
+    if (v)
+        ns_proc_view_end_task(v);
     task_mgr_refresh(tm);
 }
 
@@ -2030,6 +2015,7 @@ ns_procapp_run(const char *startup_url, const char *session_path,
     g_signal_connect(app, "activate", G_CALLBACK(on_proc_activate), &ctx);
     int status = g_application_run(G_APPLICATION(app), 0, NULL);
     g_object_unref(app);
+    ns_audio_shutdown();
     procapp_clear_http_caches(TRUE);
     g_free(ctx.url);
     g_free(ctx.session_path);

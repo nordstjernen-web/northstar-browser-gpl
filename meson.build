@@ -182,20 +182,20 @@ if have_avif
   add_project_arguments('-DNS_HAVE_AVIF=1', language: 'c')
 endif
 
-# vorbisfile is the ov_* high-level decode API over libvorbis, used by the audio
-# helper (src/audio/main.c) to decode Ogg/Vorbis natively where FFmpeg is absent.
+# vorbisfile is the ov_* high-level decode API over libvorbis, used by the
+# in-process audio mixer to decode Ogg/Vorbis natively.
 libvorbisfile = dependency('vorbisfile', required: false)
 if libvorbisfile.found()
   add_project_arguments('-DNS_HAVE_VORBISFILE=1', language: 'c')
 endif
 # opusfile is the high-level op_* decode API over libopus + libogg, used by the
-# audio helper to decode Ogg/Opus natively where FFmpeg is absent.
+# in-process audio mixer to decode Ogg/Opus natively.
 libopusfile = dependency('opusfile', required: false)
 if libopusfile.found()
   add_project_arguments('-DNS_HAVE_OPUSFILE=1', language: 'c')
 endif
 # canPlayType/mediaCapabilities may honestly advertise native Ogg audio only
-# where the decoder that plays it is built: the SDL2 northstar-audio helper.
+# where the decoder that plays it is built: the SDL2 in-process mixer.
 if get_option('audio').allowed()
   sdl2_probe = dependency('sdl2', required: false)
   if sdl2_probe.found() and libvorbisfile.found()

@@ -29,10 +29,12 @@ northstar_icon_resources = gnome.compile_resources(
 executable(
   'northstar',
   northstar_engine_sources + northstar_app_sources +
-    northstar_gtk_sources + northstar_gtk_platform_sources +
+    northstar_gtk_sources + northstar_audio_sources +
+    northstar_gtk_platform_sources +
     northstar_icon_resources +
     northstar_win_resources + [polyfills_h, wpt_hook_h],
-  dependencies: northstar_gtk_deps,
+  dependencies: northstar_gtk_deps + northstar_audio_deps,
+  link_with: northstar_audio_libs,
   c_args: ['-DNS_HAVE_GTK=1'],
   include_directories: include_directories('..', '.'),
   win_subsystem: northstar_win_subsystem,

@@ -13,7 +13,6 @@ OUT=${OUT:-$ROOT/dist/northstar-win64}
 APP=$OUT/app
 BIN_SRC=$BUILDDIR/src/gtk/northstar.exe
 LAUNCHER_SRC=$BUILDDIR/src/northstar-launcher.exe
-AUDIO_SRC=$BUILDDIR/src/northstar-audio.exe
 BROWSER_EXE=northstar-ui.exe
 EXTRA_MESON_SETUP_ARGS=()
 if [ -n "${NS_MESON_SETUP_ARGS:-}" ]; then
@@ -56,16 +55,6 @@ rm -rf "$OUT"
 mkdir -p "$APP"
 cp "$LAUNCHER_SRC" "$OUT/northstar.exe"
 cp "$BIN_SRC" "$APP/$BROWSER_EXE"
-# Audio playback helper (MP2/MP3 decode + SDL2 output). Built whenever SDL2
-# was present at configure time; ship it beside the browser exe so the shell
-# finds it (ns_proc_audio_helper_path) and seed the DLL chase below with it so
-# SDL2.dll and its transitive deps are bundled (nothing else links SDL2).
-if [ -x "$AUDIO_SRC" ]; then
-    cp "$AUDIO_SRC" "$APP/northstar-audio.exe"
-else
-    echo "pack-windows: warning: $AUDIO_SRC missing; <video>/<audio> sound will not play" >&2
-fi
-
 validate_launcher_imports() {
     local dep src alt
     while IFS= read -r dep; do
@@ -111,7 +100,6 @@ fi
 # mingw bin dir and skip anything that resolves to a Windows system DLL.
 declare -A seen
 queue=("$APP/$BROWSER_EXE")
-[ -f "$APP/northstar-audio.exe" ] && queue+=("$APP/northstar-audio.exe")
 for loader in "$APP"/lib/gdk-pixbuf-2.0/*/loaders/*.dll; do
     [ -f "$loader" ] && queue+=("$loader")
 done

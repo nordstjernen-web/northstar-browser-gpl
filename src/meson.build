@@ -200,7 +200,10 @@ if host_machine.system() == 'windows'
   )
 endif
 
-# Optional helper executables (the ipc-http benchmark and the audio helper).
+# Optional in-process audio playback.
+northstar_audio_sources = files('audio/stub.c')
+northstar_audio_deps = []
+northstar_audio_libs = []
 sdl2_dep = dependency('sdl2', required: get_option('audio'))
 if sdl2_dep.found()
   libminimp3 = static_library(
@@ -211,40 +214,20 @@ if sdl2_dep.found()
     install: false,
   )
 
-  audio_deps = [dependency('libcurl'), sdl2_dep, libplmpeg]
+  northstar_audio_sources = files('audio/audio.c')
+  northstar_audio_deps = [dependency('libcurl'), sdl2_dep, libplmpeg]
+  northstar_audio_libs = [libminimp3]
   if libvorbisfile.found()
-    audio_deps += [libvorbisfile]
+    northstar_audio_deps += [libvorbisfile]
   endif
   if libopusfile.found()
-    audio_deps += [libopusfile]
+    northstar_audio_deps += [libopusfile]
   endif
   # libm is needed by pl_mpeg / minimp3 on Linux and the BSDs; it is part of
   # the C runtime on Windows, where find_library('m') is a harmless no-op.
-  audio_lib_deps = [cc.find_library('m', required: false)]
-
-  # On Linux the helper confines itself with the same Landlock + seccomp
-  # profile as the page engine once its audio device and network stack are up,
-  # so attacker-controlled codec bytes are decoded inside the sandbox.
-  audio_sandbox_sources = []
-  if host_machine.system() == 'linux'
-    audio_sandbox_sources += files('security.c')
-    audio_deps += [glib]
-    if have_seccomp
-      audio_deps += [libseccomp]
-    endif
-  endif
-
-  executable(
-    'northstar-audio',
-    files('audio/main.c') + audio_sandbox_sources,
-    include_directories: include_directories('audio', '.'),
-    link_with: libminimp3,
-    dependencies: audio_deps + audio_lib_deps,
-    win_subsystem: 'windows',
-    install: true,
-  )
+  northstar_audio_deps += [cc.find_library('m', required: false)]
 else
-  message('SDL2 not found — audio playback helper (northstar-audio) disabled')
+  message('SDL2 not found — in-process audio playback disabled')
 endif
 
 if have_gtk

@@ -87,7 +87,7 @@ license including the LLVM exceptions is reproduced in
 
 ### minimp3 — CC0 1.0 (public domain)
 
-> MP3 decoder for the `northstar-audio` playback helper. Vendored as the
+> MP3 decoder for in-process audio playback. Vendored as the
 > single header `src/audio/minimp3.h`.
 > <https://github.com/lieff/minimp3>
 >
@@ -101,8 +101,8 @@ public domain worldwide. See:
 
 ### pl_mpeg — MIT License
 
-> MPEG-1 Audio Layer II (MP2) decoder for the `northstar-audio` playback
-> helper. Fetched as the `plmpeg` meson subproject
+> MPEG-1 Audio Layer II (MP2) decoder for in-process audio playback.
+> Fetched as the `plmpeg` meson subproject
 > (`subprojects/plmpeg/pl_mpeg.h`).
 > <https://github.com/phoboslab/pl_mpeg>
 >
@@ -189,8 +189,8 @@ may not be removed from any source distribution.
 
 ### libseccomp — GNU LGPL 2.1 (Linux only)
 
-> Syscall-filter sandbox for the headless/tooling process and the
-> `northstar-audio` helper. Linked only on Linux.
+> Syscall-filter sandbox for the browser and headless/tooling processes.
+> Linked only on Linux.
 > <https://github.com/seccomp/libseccomp>
 >
 > Copyright (c) Paul Moore and the libseccomp contributors.
@@ -237,16 +237,15 @@ on Linux distributions they are loaded from the system package manager.
 
 ### SDL2 — zlib License
 
-> Cross-platform audio output (WASAPI / CoreAudio / ALSA) for the
-> `northstar-audio` playback helper.
+> Cross-platform audio output (WASAPI / CoreAudio / ALSA) for in-process
+> audio playback.
 > <https://www.libsdl.org>
 >
 > Copyright (c) 1997-2024 Sam Lantinga and the SDL contributors.
 
 Licensed under the zlib License. See the zlib section above for the
-full text (same license). Linked only into the `northstar-audio`
-helper, and only when SDL2 is present at build time (meson `audio`
-feature).
+full text (same license). Linked into the browser when SDL2 is present
+at build time (meson `audio` feature).
 
 ### Cairo — LGPL-2.1 or MPL-1.1
 
@@ -299,7 +298,7 @@ These are linked only when present on the build host (meson
   contributors. Optional on-screen spell-checking.
 - **opusfile / libopus / vorbisfile / libvorbis / libogg** — BSD 3-Clause,
   © the Xiph.Org Foundation. Optional Ogg Opus / Vorbis decode in the
-  `northstar-audio` helper.
+  in-process audio mixer.
 
 ---
 

@@ -31,8 +31,8 @@ the CI workflows are `linux.yml` (gcc), `musl.yml` (Alpine/clang) and
   far as is feasible without bloat.
 - **No** AI-style web APIs, **no** WebGL, **no** WebGPU.
 - **Media.** There is no inline video: a `<video>` element lays out but
-  does not decode in this edition. Audio does play, through the
-  unsandboxed `northstar-audio` helper (`src/audio/main.c`), which decodes
+  does not decode in this edition. Audio plays in the browser process through
+  the asynchronous mixer (`src/audio/audio.c`), which decodes
   in-tree — the vendored CC0 [minimp3](https://github.com/lieff/minimp3)
   (`src/audio/minimp3.h`) for `.mp3`, the vendored MIT
   [pl_mpeg](https://github.com/phoboslab/pl_mpeg) (`subprojects/plmpeg/`)
@@ -192,7 +192,7 @@ Optional: `libenchant-2-dev` (plus a dictionary such as `hunspell-en-us`)
 enables on-screen spell-checking of editable text. It is auto-detected —
 the build works without it and simply does no spell-checking. The
 `opusfile` / `vorbisfile` dev packages, likewise optional, add native Ogg
-Opus/Vorbis decode to the audio helper.
+Opus/Vorbis decode to the in-process mixer.
 
 On Fedora/RHEL:
 

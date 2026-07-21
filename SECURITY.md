@@ -47,8 +47,8 @@ engine parses and renders untrusted content in the GTK shell process
 itself (`ns_rproc_single_process_enable`, `src/gtk/appmain.c`). There is
 no separate `northstar-renderer` executable and no per-tab renderer
 process — every page shares one OS process and one address space. The
-only helper the browser spawns is the unsandboxed-at-launch,
-self-sandboxing `northstar-audio` decoder (see *Media*, below).
+audio decoders and SDL2 mixer also run in that browser process on an
+asynchronous worker thread (see *Media*, below).
 
 Because there is no privilege boundary between pages, the layered
 defenses below are **hardening and containment for the whole process**,
@@ -87,31 +87,19 @@ work without writable executable pages.
 
 ### Linux sandbox
 
-Two syscall/filesystem confinement layers exist, both default-deny, both
-installed from `src/security.c` before any HTML is parsed. **How much of
-the pair is applied depends on the run mode**, and the interactive GUI
-does not get both — read this carefully, because it is the single most
-important caveat in this document:
+Two syscall/filesystem confinement layers exist, both default-deny and
+installed from `src/security.c` before any HTML or audio is parsed:
 
 | Run mode | Landlock | seccomp-bpf | `PR_SET_NO_NEW_PRIVS` |
 |----------|:--------:|:-----------:|:---------------------:|
-| **Interactive GUI** (the normal browser) | ✅ | ❌ **not applied** | ✅ |
+| **Interactive GUI** (the normal browser) | ✅ | ✅ | ✅ |
 | Headless / `--dump` / `--eval` / WPT tooling | ✅ | ✅ | ✅ |
-| `northstar-audio` helper | ✅ | ✅ | ✅ |
 
 The interactive GUI runs single-process (the engine is in the shell), and
-its startup path (`proc_mode` in `src/gtk/appmain.c`) applies **Landlock
-only** — it deliberately skips `ns_security_seccomp_init()` because the
-shell must be able to `fork`/`execve` the `northstar-audio` helper, which
-the no-`execve` seccomp filter would block. So on the normal browsing
-path the untrusted-content engine is confined by the filesystem allow-list
-and `PR_SET_NO_NEW_PRIVS`, **but not by the syscall allow-list**. The
-seccomp filter is real and is exercised by the headless/tooling entry
-point and by the audio helper (which re-imposes both layers on itself once
-its device and network are up); closing this gap for the GUI — e.g. via a
-pre-`execve` broker for the audio helper so the engine thread can take the
-full filter — is tracked as future work and called out again under *Known
-gaps*.
+its startup path (`proc_mode` in `src/gtk/appmain.c`) applies both Landlock
+and `ns_security_seccomp_init()`. No renderer or media executable needs
+`fork`/`execve`, so the browser process can use the same no-`execve`
+syscall allow-list as headless/tooling mode.
 
 - **Landlock (filesystem) — applied in every mode.** Read-only access to
   system libraries (`/usr`, `/lib`, `/lib64`), `/etc`, the CA bundle, font
@@ -124,8 +112,8 @@ gaps*.
   a bug cannot drop a payload and then map it executable from a writable
   path. `PR_SET_NO_NEW_PRIVS` is set here too, so a setuid binary cannot
   be used to regain privileges after a compromise.
-- **seccomp-bpf (syscalls) — applied to headless/tooling and the audio
-  helper.** Default-deny allow-list: the filter is built with
+- **seccomp-bpf (syscalls) — applied in every Linux mode.** Default-deny
+  allow-list: the filter is built with
   `SCMP_ACT_ERRNO(EPERM)` as the default action and then permits only the
   ~266 syscalls the browser actually needs (`ns_seccomp_allowed_names[]`
   in `src/security.c`); every other syscall returns `EPERM`. `execve` /
@@ -135,20 +123,20 @@ gaps*.
   `userfaultfd`, the `io_uring_*` family, `perf_event_open`, `kexec_load`,
   and the module syscalls are likewise absent from the allow-list. TSYNC
   propagates the filter to every thread.
-- **Media / audio.** Northstar decodes audio **in-tree** in a separate
-  `northstar-audio` helper process (`src/audio/main.c`), not via an
-  external player. When a page plays an `<audio>` element the engine emits
+- **Media / audio.** Northstar decodes audio **in-tree** in the browser
+  process (`src/audio/audio.c`), not via an external player. When a page
+  plays an `<audio>` element the engine emits
   `open`/`play`/`pause`/`seek`/`stop`/`volume` commands that ride the
   render-response `X-Audio` side-channel to the shell (`src/gtk/procview.c`),
-  which spawns the helper from the browser's own install directory
-  (`ns_proc_audio_helper_path`) with `g_subprocess_launcher_spawn` and
-  drives it over stdin/stdout — the media URL is fetched and decoded by the
-  helper, never handed to a shell or an arbitrary binary. The helper
-  decodes MP3 (vendored minimp3), MP2 (vendored pl_mpeg) and, when
+  which queues them to a per-view audio context. A dedicated worker thread
+  fetches and decodes media without blocking GTK; URLs are never handed to
+  a shell or arbitrary binary. The mixer decodes MP3 (vendored minimp3),
+  MP2 (vendored pl_mpeg) and, when
   `opusfile`/`vorbisfile` are present, Ogg Opus/Vorbis, and outputs through
-  SDL2; on Linux it re-imposes the same Landlock + seccomp profile on
-  itself before touching codec bytes. `<video>` lays out but is **not**
-  decoded in this edition, so there is no video codec attack surface.
+  SDL2. On Linux the worker inherits the browser's Landlock + seccomp
+  restrictions, but codec memory corruption is no longer isolated from
+  the browser address space. `<video>` lays out but is **not** decoded in
+  this edition, so there is no video codec attack surface.
 
 The sandbox can be disabled for debugging with `NS_NO_SANDBOX=1` (Landlock)
 / `NS_NO_SECCOMP=1` (seccomp). Don't use those in normal operation.
@@ -173,11 +161,8 @@ from `ns_security_win32_mitigations_init` in `src/security.c`
 **before** any DLL we don't statically link is touched. Six
 policies, all best-effort (an unsupported policy on an older
 Windows just returns `FALSE` and is skipped). This edition is
-single-process, so the one browser process applies **the first
-five**; it skips the sixth (ChildProcess block) because it must
-spawn the `northstar-audio` helper. The full six-policy set is still
-applied by any process that spawns nothing — e.g. the headless
-tooling entry point:
+single-process and launches no renderer or media helpers, so the browser
+and headless/tooling modes apply all six policies:
 
 - **ASLR** (`ProcessASLRPolicy`, flags `0x0F`) — force relocate
   images, force bottom-up randomization, high-entropy 64-bit
@@ -206,12 +191,8 @@ tooling entry point:
 - **ChildProcess block** (`ProcessChildProcessPolicy`, flags
   `0x01`) — no `CreateProcess` from this process, so a compromised
   process cannot directly pivot to `cmd.exe` / `powershell` / another
-  binary. The single-process GUI passes `allow_child_processes` to
-  **skip** this one policy (keeping the other five) because it must
-  launch the in-tree `northstar-audio.exe` decoder for `<audio>`
-  playback; audio bytes are fetched and decoded inside that helper, not
-  by an external player. A process that never spawns a child (the
-  headless tooling path) takes this policy too.
+  binary. The watchdog launches the browser before this policy is applied;
+  the browser process itself has no legitimate child-process requirement.
 
 There is no per-path filesystem sandbox; Windows AppContainer
 would provide one but requires a manifest and code-signing
@@ -393,14 +374,6 @@ The `document.cookie` setter:
   reach, but neither is a substitute for the address-space isolation a
   multi-process browser gives you. A per-page process sandbox is the
   largest single hardening this edition does not have.
-- **seccomp is not applied to the interactive GUI.** As detailed under
-  *Linux sandbox*, the normal browsing process runs under Landlock and
-  `PR_SET_NO_NEW_PRIVS` but **without** the seccomp syscall allow-list,
-  because it must `execve` the `northstar-audio` helper and the filter
-  blocks `execve`. A memory-safety bug in the engine can therefore issue
-  syscalls the headless/helper processes would be denied. Applying the
-  filter to the GUI (e.g. via a pre-`execve` audio broker, or an
-  `execve`-permitting variant of the filter) is tracked as future work.
 - **Iframe isolation is JS-level, not a runtime or process boundary.**
   A loaded frame shares the parent page's QuickJS runtime and global
   prototypes; its separate `window`/`document`/`location` and redirected

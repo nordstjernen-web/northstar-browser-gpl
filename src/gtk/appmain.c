@@ -9,6 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef main
+#undef main
+#endif
+
 #ifdef G_OS_WIN32
 #include <windows.h>
 #include <io.h>
@@ -492,7 +496,7 @@ main(int argc, char **argv)
         }
     }
 
-    ns_security_win32_mitigations_init(proc_mode);
+    ns_security_win32_mitigations_init(FALSE);
     ns_add_screenshot_writable_dirs(argc, argv);
 
     gboolean single_process = proc_mode;
@@ -500,17 +504,9 @@ main(int argc, char **argv)
         ns_rproc_single_process_enable();
 
     if (proc_mode) {
-        /* The proc-mode shell processes no untrusted bytes (it only blits
-         * renderer framebuffers and forwards input), but it must fork/execv
-         * renderer processes and create POSIX shm — which the no-execve seccomp
-         * filter and the read-only /dev/shm Landlock rule would block. Apply
-         * Landlock only (with /dev/shm writable and the renderer directory
-         * executable) and skip seccomp; the real syscall confinement lives in
-         * the sandboxed renderer processes. In single-process mode there is
-         * no renderer to exec, so the exec-dir widening is skipped and the
-         * engine runs in this process under the same Landlock. */
         ns_security_add_writable_dir("/dev/shm");
         ns_security_sandbox_init(g_self_exe);
+        ns_security_seccomp_init();
     } else {
         ns_security_sandbox_init(g_self_exe);
         ns_security_seccomp_init();

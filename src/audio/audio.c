@@ -1,9 +1,12 @@
-/* northstar-audio: isolated MP3 / MPEG-1 audio playback helper driven over stdin/stdout.
+/* audio/audio.c: Asynchronous in-process audio decoding and SDL2 playback.
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #define _GNU_SOURCE
 #define SDL_MAIN_HANDLED
+#include "audio.h"
+
+#include <glib.h>
 #include <SDL.h>
 #ifdef main
 #undef main
@@ -22,6 +25,7 @@
 #include <curl/curl.h>
 
 #include "pl_mpeg.h"
+#include "net.h"
 
 #ifndef MINIMP3_FLOAT_OUTPUT
 #define MINIMP3_FLOAT_OUTPUT
@@ -50,6 +54,7 @@
 #define NS_AUDIO_MAX_FLOATS  ((size_t)200u * 1024u * 1024u)
 
 typedef struct {
+    NsAudioContext *owner;
     char    token[64];
     int     used;
     int     playing;
@@ -81,12 +86,35 @@ typedef struct {
 #endif
 } ns_audio_player;
 
+struct NsAudioContext {
+    gint generation;
+    gint destroyed;
+};
+
+typedef enum {
+    NS_AUDIO_COMMAND_LINE,
+    NS_AUDIO_COMMAND_RESET,
+    NS_AUDIO_COMMAND_DESTROY,
+    NS_AUDIO_COMMAND_QUIT,
+} ns_audio_command_type;
+
+typedef struct {
+    ns_audio_command_type type;
+    NsAudioContext       *context;
+    int                   generation;
+    char                 *line;
+} ns_audio_command;
+
 static SDL_AudioDeviceID g_dev;
 static int               g_dev_ok;
 static SDL_mutex        *g_null_lock;
 static SDL_Thread       *g_null_thread;
 static SDL_atomic_t      g_null_quit;
 static ns_audio_player   g_players[NS_AUDIO_MAX_PLAYERS];
+static GAsyncQueue      *g_commands;
+static GThread          *g_worker;
+static gint              g_shutting_down;
+static char             *g_tmp_dir;
 
 #if defined(__GNUC__)
 #define NS_AUDIO_PRINTF(a, b) __attribute__((format(printf, a, b)))
@@ -101,10 +129,11 @@ emit(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    vprintf(fmt, ap);
+    char *line = g_strdup_vprintf(fmt, ap);
     va_end(ap);
-    putchar('\n');
-    fflush(stdout);
+    if (g_str_has_prefix(line, "error ") || g_getenv("NS_DBG_AUDIO"))
+        g_printerr("[audio] %s\n", line);
+    g_free(line);
 }
 
 static void
@@ -122,22 +151,24 @@ audio_unlock(void)
 }
 
 static ns_audio_player *
-player_find(const char *token)
+player_find(NsAudioContext *owner, const char *token)
 {
     for (int i = 0; i < NS_AUDIO_MAX_PLAYERS; i++)
-        if (g_players[i].used && strcmp(g_players[i].token, token) == 0)
+        if (g_players[i].used && g_players[i].owner == owner &&
+            strcmp(g_players[i].token, token) == 0)
             return &g_players[i];
     return NULL;
 }
 
 static ns_audio_player *
-player_alloc(const char *token)
+player_alloc(NsAudioContext *owner, const char *token)
 {
-    ns_audio_player *p = player_find(token);
+    ns_audio_player *p = player_find(owner, token);
     if (p) return p;
     for (int i = 0; i < NS_AUDIO_MAX_PLAYERS; i++) {
         if (!g_players[i].used) {
             memset(&g_players[i], 0, sizeof g_players[i]);
+            g_players[i].owner = owner;
             g_players[i].used = 1;
             g_players[i].volume = 1.0f;
             snprintf(g_players[i].token, sizeof g_players[i].token, "%s", token);
@@ -911,7 +942,7 @@ ain_pump(ns_audio_player *p)
     }
     ain_drain_stream(p);
 }
-#endif /* NS_HAVE_LIBAV */
+#endif
 
 static int
 resample_to_device(const float *src, size_t src_frames, int src_rate, int src_ch,
@@ -996,6 +1027,8 @@ load_audio(ns_audio_player *p, const char *path)
 typedef struct {
     FILE   *file;
     size_t  len;
+    NsAudioContext *context;
+    int generation;
 } ns_audio_download;
 
 static size_t
@@ -1016,15 +1049,36 @@ curl_write_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
 static const char *
 audio_tmp_dir(void)
 {
-    const char *d = getenv("TMPDIR");
-    return (d && *d) ? d : "/tmp";
+    if (!g_tmp_dir) {
+        g_tmp_dir = g_build_filename(g_get_user_cache_dir(), "northstar",
+                                     "msaudio", NULL);
+        if (g_mkdir_with_parents(g_tmp_dir, 0700) != 0)
+            return NULL;
+    }
+    return g_tmp_dir;
+}
+
+static int
+curl_progress_cb(void *userdata, curl_off_t dltotal, curl_off_t dlnow,
+                 curl_off_t ultotal, curl_off_t ulnow)
+{
+    (void)dltotal;
+    (void)dlnow;
+    (void)ultotal;
+    (void)ulnow;
+    ns_audio_download *d = userdata;
+    return g_atomic_int_get(&g_shutting_down) ||
+           g_atomic_int_get(&d->context->destroyed) ||
+           g_atomic_int_get(&d->context->generation) != d->generation;
 }
 
 static char *
-write_temp_from_url(const char *url)
+write_temp_from_url(NsAudioContext *context, const char *url)
 {
     char tmpl[PATH_MAX];
-    snprintf(tmpl, sizeof tmpl, "%s/nsaudio-XXXXXX", audio_tmp_dir());
+    const char *dir = audio_tmp_dir();
+    if (!dir) return NULL;
+    snprintf(tmpl, sizeof tmpl, "%s/nsaudio-XXXXXX", dir);
 #if defined(_WIN32)
     int fd = mkstemp(tmpl);
 #else
@@ -1037,7 +1091,9 @@ write_temp_from_url(const char *url)
     int ok = 0;
     CURL *c = curl_easy_init();
     if (c) {
-        ns_audio_download dl = { f, 0 };
+        ns_audio_download dl = {
+            f, 0, context, g_atomic_int_get(&context->generation)
+        };
         curl_easy_setopt(c, CURLOPT_URL, url);
         curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, curl_write_cb);
         curl_easy_setopt(c, CURLOPT_WRITEDATA, &dl);
@@ -1059,12 +1115,25 @@ write_temp_from_url(const char *url)
         curl_easy_setopt(c, CURLOPT_TIMEOUT, 30L);
         curl_easy_setopt(c, CURLOPT_FAILONERROR, 1L);
         curl_easy_setopt(c, CURLOPT_USERAGENT, "Northstar-Audio");
+        curl_easy_setopt(c, CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(c, CURLOPT_XFERINFOFUNCTION, curl_progress_cb);
+        curl_easy_setopt(c, CURLOPT_XFERINFODATA, &dl);
         curl_easy_setopt(c, CURLOPT_SSL_VERIFYPEER, 1L);
         curl_easy_setopt(c, CURLOPT_SSL_VERIFYHOST, 2L);
+        const char *proxy = ns_net_proxy_override();
+        if (!proxy || !*proxy)
+            proxy = strncmp(url, "https://", 8) == 0
+                ? ns_net_https_proxy() : ns_net_http_proxy();
+        if (proxy && *proxy)
+            curl_easy_setopt(c, CURLOPT_PROXY, proxy);
+        const char *no_proxy = ns_net_no_proxy();
+        if (no_proxy && *no_proxy)
+            curl_easy_setopt(c, CURLOPT_NOPROXY, no_proxy);
 #if defined(_WIN32) && defined(CURLSSLOPT_NATIVE_CA)
         curl_easy_setopt(c, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_NATIVE_CA);
 #endif
-        const char *ca = getenv("CURL_CA_BUNDLE");
+        const char *ca = ns_net_ca_bundle_path();
+        if (!ca || !*ca) ca = getenv("CURL_CA_BUNDLE");
         if (!ca || !*ca) ca = getenv("SSL_CERT_FILE");
         if (ca && *ca)
             curl_easy_setopt(c, CURLOPT_CAINFO, ca);
@@ -1077,7 +1146,7 @@ write_temp_from_url(const char *url)
 }
 
 static const char *
-local_path_for(const char *url, char **tmp_out)
+local_path_for(NsAudioContext *context, const char *url, char **tmp_out)
 {
     *tmp_out = NULL;
     if (strncmp(url, "file://", 7) == 0) {
@@ -1087,7 +1156,7 @@ local_path_for(const char *url, char **tmp_out)
     }
     if (strncmp(url, "http://", 7) == 0 || strncmp(url, "https://", 8) == 0 ||
         strncmp(url, "data:", 5) == 0) {
-        char *t = write_temp_from_url(url);
+        char *t = write_temp_from_url(context, url);
         if (!t) return NULL;
         *tmp_out = t;
         return t;
@@ -1109,14 +1178,14 @@ resume_if_grown(ns_audio_player *p)
 #endif
 
 static void
-cmd_open(const char *token, const char *url)
+cmd_open(NsAudioContext *context, const char *token, const char *url)
 {
-    ns_audio_player *p = player_alloc(token);
+    ns_audio_player *p = player_alloc(context, token);
     if (!p) { emit("error %s too-many-players", token); return; }
     audio_lock();
     player_release(p);
     audio_unlock();
-    p = player_alloc(token);
+    p = player_alloc(context, token);
 
     if (!g_dev_ok && !g_null_thread) {
         emit("error %s no-audio-device", token);
@@ -1124,7 +1193,7 @@ cmd_open(const char *token, const char *url)
     }
 
     char *tmp = NULL;
-    const char *path = local_path_for(url, &tmp);
+    const char *path = local_path_for(context, url, &tmp);
     if (!path) { emit("error %s fetch-failed", token); return; }
     p->tmp_path = tmp;
 
@@ -1150,13 +1219,13 @@ cmd_open(const char *token, const char *url)
 }
 
 static void
-cmd_reload(const char *token, const char *url)
+cmd_reload(NsAudioContext *context, const char *token, const char *url)
 {
-    ns_audio_player *p = player_find(token);
-    if (!p) { cmd_open(token, url); return; }
+    ns_audio_player *p = player_find(context, token);
+    if (!p) { cmd_open(context, token, url); return; }
 
     char *tmp = NULL;
-    const char *path = local_path_for(url, &tmp);
+    const char *path = local_path_for(context, url, &tmp);
     if (!path) { emit("error %s fetch-failed", token); free(tmp); return; }
 
 #ifdef NS_HAVE_LIBAV
@@ -1259,9 +1328,9 @@ cmd_reload(const char *token, const char *url)
 }
 
 static void
-cmd_play(const char *token)
+cmd_play(NsAudioContext *context, const char *token)
 {
-    ns_audio_player *p = player_find(token);
+    ns_audio_player *p = player_find(context, token);
     if (!p || !p->pcm) return;
     audio_lock();
     if (p->cursor >= p->frames) p->cursor = 0;
@@ -1272,9 +1341,9 @@ cmd_play(const char *token)
 }
 
 static void
-cmd_pause(const char *token)
+cmd_pause(NsAudioContext *context, const char *token)
 {
-    ns_audio_player *p = player_find(token);
+    ns_audio_player *p = player_find(context, token);
     if (!p || !p->pcm) return;
     audio_lock();
     p->playing = 0;
@@ -1283,9 +1352,9 @@ cmd_pause(const char *token)
 }
 
 static void
-cmd_seek(const char *token, double seconds)
+cmd_seek(NsAudioContext *context, const char *token, double seconds)
 {
-    ns_audio_player *p = player_find(token);
+    ns_audio_player *p = player_find(context, token);
     if (!p || !p->pcm) return;
     if (seconds < 0) seconds = 0;
     size_t frame = (size_t)(seconds * NS_AUDIO_DEVICE_RATE);
@@ -1297,9 +1366,9 @@ cmd_seek(const char *token, double seconds)
 }
 
 static void
-cmd_volume(const char *token, double vol)
+cmd_volume(NsAudioContext *context, const char *token, double vol)
 {
-    ns_audio_player *p = player_find(token);
+    ns_audio_player *p = player_find(context, token);
     if (!p || !p->pcm) return;
     if (vol < 0) vol = 0;
     if (vol > 1) vol = 1;
@@ -1309,9 +1378,9 @@ cmd_volume(const char *token, double vol)
 }
 
 static void
-cmd_loop(const char *token, int on)
+cmd_loop(NsAudioContext *context, const char *token, int on)
 {
-    ns_audio_player *p = player_find(token);
+    ns_audio_player *p = player_find(context, token);
     if (!p) return;
     audio_lock();
     p->loop = on ? 1 : 0;
@@ -1319,9 +1388,9 @@ cmd_loop(const char *token, int on)
 }
 
 static void
-cmd_stop(const char *token)
+cmd_stop(NsAudioContext *context, const char *token)
 {
-    ns_audio_player *p = player_find(token);
+    ns_audio_player *p = player_find(context, token);
     if (!p) return;
     audio_lock();
     player_release(p);
@@ -1329,7 +1398,7 @@ cmd_stop(const char *token)
 }
 
 static void
-poll_players(void)
+poll_players(NsAudioContext *context)
 {
     struct { char token[64]; double pos; int ended; int active; }
         snap[NS_AUDIO_MAX_PLAYERS];
@@ -1337,7 +1406,7 @@ poll_players(void)
     audio_lock();
     for (int i = 0; i < NS_AUDIO_MAX_PLAYERS; i++) {
         ns_audio_player *p = &g_players[i];
-        if (!p->used || !p->pcm) continue;
+        if (!p->used || p->owner != context || !p->pcm) continue;
         if (p->playing || p->reached_end) {
             memcpy(snap[m].token, p->token, sizeof snap[m].token);
             snap[m].pos = (double)p->cursor / NS_AUDIO_DEVICE_RATE;
@@ -1368,34 +1437,91 @@ next_token(char **cursor)
     return start;
 }
 
-#ifdef __linux__
-void ns_security_add_writable_dir(const char *dir);
-void ns_security_sandbox_init(const char *self_exe);
-void ns_security_seccomp_init(void);
+static void
+release_context_players(NsAudioContext *context)
+{
+    audio_lock();
+    for (int i = 0; i < NS_AUDIO_MAX_PLAYERS; i++)
+        if (g_players[i].used && g_players[i].owner == context)
+            player_release(&g_players[i]);
+    audio_unlock();
+}
 
 static void
-sandbox_self(void)
+process_line(NsAudioContext *context, char *line)
 {
-    ns_security_add_writable_dir(audio_tmp_dir());
-    char self[PATH_MAX];
-    ssize_t n = readlink("/proc/self/exe", self, sizeof self - 1);
-    self[n > 0 ? n : 0] = '\0';
-    ns_security_sandbox_init(n > 0 ? self : NULL);
-    ns_security_seccomp_init();
-}
-#endif
+    char *cur = line;
+    char *op = next_token(&cur);
+    if (!op || strcmp(op, "poll") == 0) {
+        poll_players(context);
+        return;
+    }
 
-int
-main(void)
+    char *token = next_token(&cur);
+    if (!token) return;
+
+    if (strcmp(op, "open") == 0) {
+        while (*cur == ' ') cur++;
+        cmd_open(context, token, cur);
+    } else if (strcmp(op, "play") == 0) {
+        cmd_play(context, token);
+    } else if (strcmp(op, "pause") == 0) {
+        cmd_pause(context, token);
+    } else if (strcmp(op, "seek") == 0) {
+        char *value = next_token(&cur);
+        cmd_seek(context, token, value ? atof(value) : 0.0);
+    } else if (strcmp(op, "volume") == 0) {
+        char *value = next_token(&cur);
+        cmd_volume(context, token, value ? atof(value) : 1.0);
+    } else if (strcmp(op, "loop") == 0) {
+        char *value = next_token(&cur);
+        cmd_loop(context, token, value ? atoi(value) : 0);
+    } else if (strcmp(op, "stop") == 0) {
+        cmd_stop(context, token);
+    } else if (strcmp(op, "reload") == 0) {
+        while (*cur == ' ') cur++;
+        cmd_reload(context, token, cur);
+    }
+}
+
+static gpointer
+audio_worker(gpointer data)
 {
-    setvbuf(stdout, NULL, _IOLBF, 0);
+    (void)data;
+    for (;;) {
+        ns_audio_command *command = g_async_queue_pop(g_commands);
+        if (command->type == NS_AUDIO_COMMAND_QUIT) {
+            g_free(command);
+            break;
+        }
+        if (command->type == NS_AUDIO_COMMAND_RESET) {
+            release_context_players(command->context);
+        } else if (command->type == NS_AUDIO_COMMAND_DESTROY) {
+            release_context_players(command->context);
+            g_free(command->context);
+        } else if (!g_atomic_int_get(&g_shutting_down) &&
+                   !g_atomic_int_get(&command->context->destroyed) &&
+                   command->generation ==
+                       g_atomic_int_get(&command->context->generation)) {
+            process_line(command->context, command->line);
+        }
+        g_free(command->line);
+        g_free(command);
+    }
+    return NULL;
+}
+
+static gboolean
+audio_start(void)
+{
+    if (g_worker) return TRUE;
+    if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
+        return FALSE;
 #ifdef NS_HAVE_LIBAV
     av_log_set_level(AV_LOG_QUIET);
 #endif
-    curl_global_init(CURL_GLOBAL_DEFAULT);
-
     SDL_SetMainReady();
-    if (SDL_Init(SDL_INIT_AUDIO) == 0) {
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) == 0) {
         SDL_AudioSpec want, have;
         SDL_memset(&want, 0, sizeof want);
         want.freq = NS_AUDIO_DEVICE_RATE;
@@ -1410,59 +1536,93 @@ main(void)
         }
     }
     if (!g_dev_ok) null_audio_start();
+    g_atomic_int_set(&g_shutting_down, 0);
+    g_commands = g_async_queue_new();
+    g_worker = g_thread_new("ns-audio", audio_worker, NULL);
     emit("ready %s", g_dev_ok || g_null_thread ? "1" : "0");
+    return TRUE;
+}
 
-#ifdef __linux__
-    sandbox_self();
-#endif
+static void
+queue_command(ns_audio_command_type type, NsAudioContext *context,
+              const char *line)
+{
+    ns_audio_command *command = g_new0(ns_audio_command, 1);
+    command->type = type;
+    command->context = context;
+    command->generation = context
+        ? g_atomic_int_get(&context->generation) : 0;
+    command->line = g_strdup(line);
+    g_async_queue_push(g_commands, command);
+}
 
-    char line[4096];
-    while (fgets(line, sizeof line, stdin)) {
-        size_t n = strlen(line);
-        while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r'))
-            line[--n] = '\0';
-        char *cur = line;
-        char *op = next_token(&cur);
-        if (!op) { poll_players(); continue; }
+NsAudioContext *
+ns_audio_context_new(void)
+{
+    return g_new0(NsAudioContext, 1);
+}
 
-        if (strcmp(op, "quit") == 0) break;
-        if (strcmp(op, "poll") == 0) { poll_players(); continue; }
-
-        char *token = next_token(&cur);
-        if (!token) continue;
-
-        if (strcmp(op, "open") == 0) {
-            while (*cur == ' ') cur++;
-            cmd_open(token, cur);
-        } else if (strcmp(op, "play") == 0) {
-            cmd_play(token);
-        } else if (strcmp(op, "pause") == 0) {
-            cmd_pause(token);
-        } else if (strcmp(op, "seek") == 0) {
-            char *v = next_token(&cur);
-            cmd_seek(token, v ? atof(v) : 0.0);
-        } else if (strcmp(op, "volume") == 0) {
-            char *v = next_token(&cur);
-            cmd_volume(token, v ? atof(v) : 1.0);
-        } else if (strcmp(op, "loop") == 0) {
-            char *v = next_token(&cur);
-            cmd_loop(token, v ? atoi(v) : 0);
-        } else if (strcmp(op, "stop") == 0) {
-            cmd_stop(token);
-        } else if (strcmp(op, "reload") == 0) {
-            while (*cur == ' ') cur++;
-            cmd_reload(token, cur);
-        }
+void
+ns_audio_context_dispatch(NsAudioContext *context, const char *command)
+{
+    if (!context || !command || !*command ||
+        g_atomic_int_get(&context->destroyed))
+        return;
+    if (!audio_start()) {
+        g_printerr("northstar: audio playback could not initialize\n");
+        return;
     }
+    queue_command(NS_AUDIO_COMMAND_LINE, context, command);
+}
 
+void
+ns_audio_context_reset(NsAudioContext *context)
+{
+    if (!context || g_atomic_int_get(&context->destroyed)) return;
+    g_atomic_int_inc(&context->generation);
+    if (g_worker)
+        queue_command(NS_AUDIO_COMMAND_RESET, context, NULL);
+}
+
+void
+ns_audio_context_destroy(NsAudioContext *context)
+{
+    if (!context ||
+        !g_atomic_int_compare_and_exchange(&context->destroyed, 0, 1))
+        return;
+    g_atomic_int_inc(&context->generation);
+    if (g_worker)
+        queue_command(NS_AUDIO_COMMAND_DESTROY, context, NULL);
+    else
+        g_free(context);
+}
+
+void
+ns_audio_shutdown(void)
+{
+    if (!g_worker) return;
+    g_atomic_int_set(&g_shutting_down, 1);
+    queue_command(NS_AUDIO_COMMAND_QUIT, NULL, NULL);
+    g_thread_join(g_worker);
+    g_worker = NULL;
     null_audio_stop();
     if (g_dev_ok) {
         SDL_CloseAudioDevice(g_dev);
+        g_dev = 0;
         g_dev_ok = 0;
     }
     for (int i = 0; i < NS_AUDIO_MAX_PLAYERS; i++)
         if (g_players[i].used) player_release(&g_players[i]);
-    SDL_Quit();
+    ns_audio_command *command;
+    while ((command = g_async_queue_try_pop(g_commands))) {
+        if (command->type == NS_AUDIO_COMMAND_DESTROY)
+            g_free(command->context);
+        g_free(command->line);
+        g_free(command);
+    }
+    g_async_queue_unref(g_commands);
+    g_commands = NULL;
+    SDL_QuitSubSystem(SDL_INIT_AUDIO);
     curl_global_cleanup();
-    return 0;
+    g_clear_pointer(&g_tmp_dir, g_free);
 }

@@ -53,13 +53,13 @@ install_zypper() {
         rpm-build patchelf ca-certificates \
         gtk4-devel libepoxy-devel libcurl-devel libopenssl-devel libuchardet-devel libpsl-devel \
         sqlite3-devel librsvg-devel libseccomp-devel libwebp-devel libavif-devel
-    # SDL2 backs the auto-detected audio helper; keep it out of the required
+    # SDL2 backs auto-detected in-process audio; keep it out of the required
     # set so an unavailable/mid-sync package degrades to no audio, not a failed
     # nightly. Its own line (not the optional group) so it is independent of
     # poppler availability.
     zypper --non-interactive --gpg-auto-import-keys install --no-recommends \
         libSDL2-devel \
-        || echo "nightly-distro-build(opensuse): SDL2 unavailable; audio helper skipped" >&2
+        || echo "nightly-distro-build(opensuse): SDL2 unavailable; audio playback skipped" >&2
     zypper --non-interactive --gpg-auto-import-keys install --no-recommends \
         libpoppler-glib-devel \
         fontconfig-devel pango-devel libavif-devel || true

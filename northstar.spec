@@ -86,7 +86,6 @@ rmdir %{buildroot}%{_includedir}/northstar 2>/dev/null || :
 %doc README.md
 %license %{_datadir}/northstar/LICENSE
 %{_bindir}/northstar
-%{_bindir}/northstar-audio
 %{_datadir}/applications/org.northstar.WebBrowser.desktop
 %{_datadir}/metainfo/org.northstar.WebBrowser.metainfo.xml
 %{_datadir}/northstar/

@@ -18,7 +18,7 @@ by section, not against another browser.
 
 **Security:** on Linux the browser runs behind a Landlock filesystem
 sandbox (plus `PR_SET_NO_NEW_PRIVS`), with a default-deny seccomp syscall
-filter added in the headless/tooling and audio-helper processes · no JIT.
+filter in both GUI and headless/tooling modes · no JIT.
 See [SECURITY.md](SECURITY.md) for the exact per-mode posture.
 
 **Minimalism:** one window, one page, one process. The engine is a
@@ -32,8 +32,8 @@ This edition strips Northstar down to a single-window, single-page,
 single-process desktop browser, based on the
 [Nordstjernen project](https://github.com/nordstjernen-web/nordstjernen).
 
-Audio still plays (MP3, MP2, Ogg Opus/Vorbis via the `northstar-audio`
-helper), images still decode (PNG/GIF/BMP/JPEG via Wuffs, plus AVIF and
+Audio still plays in-process (MP3, MP2, Ogg Opus/Vorbis), images still
+decode (PNG/GIF/BMP/JPEG via Wuffs, plus AVIF and
 SVG), and the JavaScript, CSS, networking, WebAssembly and WebCrypto
 engines are unchanged.
 
@@ -53,7 +53,7 @@ engines are unchanged.
   is checked against a local SHA-256 blocklist. The check runs entirely
   on-device.
 - **Media** — images (PNG, GIF, BMP, JPEG, AVIF, SVG); audio (`<audio>`)
-  plays through the `northstar-audio` helper. `<video>` lays out but
+  decodes and plays in the browser process. `<video>` lays out but
   does not decode in this edition.
 - **MathML** — a minimalist presentation-MathML renderer.
 - **Spell checking** — optional, via the Enchant library.
@@ -97,15 +97,15 @@ browser engine (no Gecko, WebKit, or Blink). It is the GPL edition of the
 |-----------|------|
 | [WAMR](https://github.com/bytecodealliance/wasm-micro-runtime) (subset) | WebAssembly interpreter |
 | [Wuffs](https://github.com/google/wuffs) v0.4 | Memory-safe image decoding — PNG, GIF, BMP, JPEG |
-| [pl_mpeg](https://github.com/phoboslab/pl_mpeg) (MIT) | MP2 audio decode for the audio helper |
-| [minimp3](https://github.com/lieff/minimp3) (CC0) | MP3 decode for the audio helper |
+| [pl_mpeg](https://github.com/phoboslab/pl_mpeg) (MIT) | In-process MP2 audio decode |
+| [minimp3](https://github.com/lieff/minimp3) (CC0) | In-process MP3 audio decode |
 
 **Required system libraries:** GTK 4 (≥ 4.14), GLib/Pango/Cairo/gdk-pixbuf,
 libcurl (≥ 8.5), OpenSSL (libcrypto), uchardet, libpsl, SQLite, librsvg
 (≥ 2.54), libavif, SDL2, and libseccomp (Linux only).
 
-**Optional** (auto-detected): opusfile / vorbisfile (Ogg audio for the
-audio helper), Enchant (spell-checking), fontconfig / pangoft2.
+**Optional** (auto-detected): opusfile / vorbisfile (in-process Ogg audio),
+Enchant (spell-checking), fontconfig / pangoft2.
 
 ## License
 

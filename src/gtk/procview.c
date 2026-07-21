@@ -5,6 +5,7 @@
 
 #include "procview.h"
 #include "i18n.h"
+#include "audio/audio.h"
 
 #include "proc_limits.h"
 #include "rproc_http.h"
@@ -145,8 +146,7 @@ struct NsProcView {
     char       *renderer_path;
     gboolean    private_mode;
 
-    GSubprocess  *audio_proc;
-    GOutputStream *audio_in;
+    NsAudioContext *audio;
 
     NsProcNotify notify;
     gpointer     notify_ud;
@@ -455,13 +455,12 @@ set_busy_cursor(NsProcView *v)
         gtk_widget_set_cursor_from_name(v->area, "wait");
 }
 
-static void pv_audio_shutdown(NsProcView *v);
 static void request_render(NsProcView *v);
 
 static void
 pv_free(NsProcView *v)
 {
-    pv_audio_shutdown(v);
+    ns_audio_context_destroy(v->audio);
     if (v->queue) {
         Req *r;
         while ((r = g_async_queue_try_pop(v->queue))) {
@@ -547,217 +546,20 @@ ns_proc_renderer_path(void)
     return g_strdup(name);
 }
 
-static char *
-ns_proc_audio_helper_path(void)
-{
-#ifdef G_OS_WIN32
-    const char *name = "northstar-audio.exe";
-#else
-    const char *name = "northstar-audio";
-#endif
-    const char *exe = ns_app_self_exe();
-    if (exe) {
-        char *dir = g_path_get_dirname(exe);
-        char *parent = g_build_filename("..", name, NULL);
-        const char *rel[] = { name, parent, NULL };
-        for (int i = 0; rel[i]; i++) {
-            char *cand = g_build_filename(dir, rel[i], NULL);
-            if (g_file_test(cand, G_FILE_TEST_IS_EXECUTABLE)) {
-                g_free(parent);
-                g_free(dir);
-                return cand;
-            }
-            g_free(cand);
-        }
-        g_free(parent);
-        g_free(dir);
-    }
-    return g_strdup(name);
-}
-
-static void
-ns_proc_audio_apply_proxy_env(GSubprocessLauncher *launcher)
-{
-    const char *override = ns_net_proxy_override();
-    if (override && *override) {
-        g_subprocess_launcher_setenv(launcher, "all_proxy", override, TRUE);
-        g_subprocess_launcher_setenv(launcher, "http_proxy", override, TRUE);
-        g_subprocess_launcher_setenv(launcher, "https_proxy", override, TRUE);
-    } else {
-        const char *http_proxy = ns_net_http_proxy();
-        const char *https_proxy = ns_net_https_proxy();
-        if (http_proxy && *http_proxy)
-            g_subprocess_launcher_setenv(launcher, "http_proxy", http_proxy, TRUE);
-        if (https_proxy && *https_proxy)
-            g_subprocess_launcher_setenv(launcher, "https_proxy", https_proxy, TRUE);
-    }
-    const char *no_proxy = ns_net_no_proxy();
-    if (no_proxy && *no_proxy)
-        g_subprocess_launcher_setenv(launcher, "no_proxy", no_proxy, TRUE);
-    const char *ca = ns_net_ca_bundle_path();
-    if (ca && *ca)
-        g_subprocess_launcher_setenv(launcher, "CURL_CA_BUNDLE", ca, TRUE);
-}
-
-
-static void
-pv_audio_feedback_line(GObject *src, GAsyncResult *res, gpointer user_data)
-{
-    NsProcView *v = user_data;
-    GDataInputStream *in = G_DATA_INPUT_STREAM(src);
-    char *line = g_data_input_stream_read_line_finish(in, res, NULL, NULL);
-    if (!line) {
-        g_object_unref(in);
-        if (v) pv_unref(v);
-        return;
-    }
-    if (g_str_has_prefix(line, "error ") || g_getenv("NS_DBG_AUDIO"))
-        g_printerr("[audio-helper] %s\n", line);
-    g_free(line);
-    g_data_input_stream_read_line_async(in, G_PRIORITY_DEFAULT, NULL,
-                                        pv_audio_feedback_line, v);
-}
-
-static void
-pv_audio_pump(NsProcView *v, const char *commands)
-{
-    if (!commands || !*commands) return;
-    if (!v->audio_proc) {
-        char *path = ns_proc_audio_helper_path();
-        GError *err = NULL;
-        GSubprocessLauncher *launcher = g_subprocess_launcher_new(
-            G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE |
-            G_SUBPROCESS_FLAGS_STDERR_SILENCE);
-        ns_proc_audio_apply_proxy_env(launcher);
-        v->audio_proc = g_subprocess_launcher_spawn(launcher, &err, path, NULL);
-        g_object_unref(launcher);
-        if (!v->audio_proc) {
-            g_printerr("northstar: audio helper %s failed to start: %s\n",
-                       path, err ? err->message : "unknown error");
-            g_free(path);
-            g_clear_error(&err);
-            return;
-        }
-        if (g_getenv("NS_DBG_AUDIO"))
-            g_printerr("[audio-pump] spawn %s -> ok\n", path);
-        g_free(path);
-        v->audio_in = g_subprocess_get_stdin_pipe(v->audio_proc);
-        GInputStream *feedback = g_subprocess_get_stdout_pipe(v->audio_proc);
-        if (feedback)
-            g_data_input_stream_read_line_async(
-                g_data_input_stream_new(feedback), G_PRIORITY_DEFAULT, NULL,
-                pv_audio_feedback_line, pv_ref(v));
-    }
-    if (!v->audio_in) return;
-
-    char **lines = g_strsplit(commands, "\x1f", -1);
-    for (int i = 0; lines[i]; i++) {
-        if (!*lines[i]) continue;
-        char *line = g_strconcat(lines[i], "\n", NULL);
-        if (g_getenv("NS_DBG_AUDIO"))
-            g_printerr("[audio-pump] cmd: %s", line);
-        g_output_stream_write_all(v->audio_in, line, strlen(line),
-                                  NULL, NULL, NULL);
-        g_free(line);
-    }
-    g_output_stream_flush(v->audio_in, NULL, NULL);
-    g_strfreev(lines);
-}
-
-static void
-pv_audio_shutdown(NsProcView *v)
-{
-    if (!v->audio_proc) return;
-    if (v->audio_in) {
-        g_output_stream_write_all(v->audio_in, "quit\n", 5, NULL, NULL, NULL);
-        g_output_stream_flush(v->audio_in, NULL, NULL);
-    }
-    g_subprocess_force_exit(v->audio_proc);
-    g_clear_object(&v->audio_proc);
-    v->audio_in = NULL;
-}
-
-
-static void
-pv_append_proc_threads(GString *out, int pid)
-{
-#ifdef __linux__
-    char *taskdir = g_strdup_printf("/proc/%d/task", pid);
-    GDir *dir = g_dir_open(taskdir, 0, NULL);
-    if (dir) {
-        long hz = sysconf(_SC_CLK_TCK);
-        if (hz <= 0) hz = 100;
-        const char *tid;
-        while ((tid = g_dir_read_name(dir))) {
-            char *stat_path = g_strdup_printf("%s/%s/stat", taskdir, tid);
-            char *stat = NULL;
-            if (g_file_get_contents(stat_path, &stat, NULL, NULL)) {
-                char *close = strrchr(stat, ')');
-                char *open = strchr(stat, '(');
-                if (open && close && close > open) {
-                    char name[32] = {0};
-                    g_strlcpy(name, open + 1,
-                              MIN((gsize)(close - open), sizeof name));
-                    char state = 0;
-                    unsigned long utime = 0, stime = 0;
-                    if (sscanf(close + 1,
-                               " %c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u "
-                               "%lu %lu", &state, &utime, &stime) >= 1)
-                        g_string_append_printf(
-                            out, "    tid %-7s %-16s %c  cpu %.2fs\n",
-                            tid, name, state,
-                            (double)(utime + stime) / (double)hz);
-                }
-                g_free(stat);
-            }
-            g_free(stat_path);
-        }
-        g_dir_close(dir);
-    }
-    g_free(taskdir);
-#else
-    (void)out; (void)pid;
-#endif
-}
-
-static void
-pv_append_media_process_stats(NsProcView *v, GString *out)
-{
-    struct { const char *label; int pid; } procs[] = {
-        { "audio helper (northstar-audio)", ns_proc_view_audio_pid(v) },
-    };
-    gboolean any = FALSE;
-    for (gsize i = 0; i < G_N_ELEMENTS(procs); i++) {
-        if (procs[i].pid <= 0) continue;
-        if (!any) {
-            g_string_append(out, "\n\n== Media helper processes ==\n");
-            any = TRUE;
-        }
-        char state[32] = "";
-        long rss = -1;
-        ns_rproc_http_proc_info(procs[i].pid, state, sizeof state, &rss);
-        g_string_append_printf(out, "%s  pid %d  %s  rss %.1f MB\n",
-                               procs[i].label, procs[i].pid, state,
-                               rss >= 0 ? rss / 1024.0 : 0.0);
-        pv_append_proc_threads(out, procs[i].pid);
-    }
-}
-
 static void
 pv_media_pump(NsProcView *v, const char *commands)
 {
     if (!commands || !*commands) return;
+    if (!v->audio)
+        v->audio = ns_audio_context_new();
     char **lines = g_strsplit(commands, "\x1f", -1);
-    GString *audio = g_string_new(NULL);
     for (int i = 0; lines[i]; i++) {
         if (!*lines[i]) continue;
-        g_string_append(audio, lines[i]);
-        g_string_append_c(audio, '\x1f');
+        if (g_getenv("NS_DBG_AUDIO"))
+            g_printerr("[audio-pump] cmd: %s\n", lines[i]);
+        ns_audio_context_dispatch(v->audio, lines[i]);
     }
     g_strfreev(lines);
-    if (audio->len)
-        pv_audio_pump(v, audio->str);
-    g_string_free(audio, TRUE);
 }
 
 static cairo_surface_t *
@@ -1586,7 +1388,7 @@ do_load(NsProcView *v, const char *url, gboolean record, gboolean history)
     if (!url || !*url)
         return;
     pv_perm_resolve(v, FALSE);
-    pv_audio_shutdown(v);
+    ns_audio_context_reset(v->audio);
     v->pending_record = record;
     int seq = ++v->load_seq;
     ++v->render_seq;
@@ -1715,20 +1517,6 @@ ns_proc_view_renderer_pid(NsProcView *v)
     return pid;
 }
 
-static int
-pv_subprocess_pid(GSubprocess *proc)
-{
-    if (!proc) return -1;
-    const char *id = g_subprocess_get_identifier(proc);
-    return id ? atoi(id) : -1;
-}
-
-int
-ns_proc_view_audio_pid(NsProcView *v)
-{
-    return v ? pv_subprocess_pid(v->audio_proc) : -1;
-}
-
 void
 ns_proc_view_end_task(NsProcView *v)
 {
@@ -1741,11 +1529,6 @@ ns_proc_view_end_task(NsProcView *v)
     g_mutex_unlock(&v->proc_lock);
 }
 
-void
-ns_proc_view_stop_audio(NsProcView *v)
-{
-    if (v) pv_audio_shutdown(v);
-}
 double ns_proc_view_zoom(NsProcView *v) { return cur_scale(v); }
 
 void ns_proc_view_focus(NsProcView *v)
@@ -2136,13 +1919,7 @@ on_result(gpointer data)
         case DEV_TAB_ELEMENTS:    buf = v->elements_buffer; break;
         default: break;
         }
-        if (buf == v->perf_buffer) {
-            GString *text = g_string_new(
-                (res->href && *res->href) ? res->href : ns_i18n("(empty)"));
-            pv_append_media_process_stats(v, text);
-            gtk_text_buffer_set_text(buf, text->str, -1);
-            g_string_free(text, TRUE);
-        } else if (buf) {
+        if (buf) {
             gtk_text_buffer_set_text(
                 buf, (res->href && *res->href) ? res->href : ns_i18n("(empty)"),
                 -1);

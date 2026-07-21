@@ -66,7 +66,7 @@ once (`apt install ccache` / `dnf install ccache`). Optionally use the
 |--------|---------|--------|
 | `gtk` | `auto` | Build the GTK 4 desktop shell. Disable for an engine-only build. |
 | `wasm` | `auto` | Build the WebAssembly JS API over vendored WAMR. |
-| `audio` | `auto` | Build the `northstar-audio` playback helper (needs SDL2). |
+| `audio` | `auto` | Enable in-process audio playback (needs SDL2). |
 | `ipc_experiment` | `false` | Build the HTTP-vs-binary IPC comparison benchmark. |
 | `build_date` | *(configure date)* | Build-date stamp shown in the About dialog. |
 
