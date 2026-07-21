@@ -1103,7 +1103,6 @@ gboolean
 ns_user_agent_has_client_hints(const char *user_agent)
 {
     return user_agent && strstr(user_agent, "Chrome/") &&
-           !strstr(user_agent, "Northstar/") &&
            !strstr(user_agent, "Ladybird/");
 }
 
