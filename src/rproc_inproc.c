@@ -43,6 +43,7 @@ static void
 conn_close(InprocConn *conn)
 {
     ns_renderer_session_free(conn->session);
+    free(conn->fb);
 #ifdef _WIN32
     _close(conn->ctrl_r);
     _close(conn->ctrl_w);
