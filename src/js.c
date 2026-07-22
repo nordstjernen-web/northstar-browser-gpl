@@ -6334,18 +6334,12 @@ ns_js_clear_children(ns_js *js, ns_node *n)
         ns_element_clear_children(n);
         return;
     }
-    gboolean defer_free = js->dispatch_depth > 0;
     ns_node *c = n->first_child;
     while (c) {
         ns_node *next = c->next_sibling;
         ns_node_remove(c);
         ns_js_index_child_change(js, n, NULL, c);
-        if (defer_free) {
-            g_hash_table_add(js->orphan_nodes, c);
-        } else {
-            ns_js_purge_subtree_rafs(js, c);
-            ns_node_free(c);
-        }
+        g_hash_table_add(js->orphan_nodes, c);
         c = next;
     }
     n->first_child = NULL;
@@ -44997,12 +44991,15 @@ ns_js_free(ns_js *js)
             ns_js_ws *s = g_ptr_array_index(js->pending_ws, i);
             if (!s) continue;
             if (s->ws) { ns_ws_free(s->ws); s->ws = NULL; }
-            if (s->wrapper_pinned) {
-                s->wrapper_pinned = FALSE;
-                JS_FreeValue(js->ctx, s->wrapper);
-            }
+            JSValue wrapper = s->wrapper;
+            gboolean pinned = s->wrapper_pinned;
+            s->wrapper_pinned = FALSE;
             s->ctx = NULL;
             s->js  = NULL;
+            JS_SetOpaque(wrapper, NULL);
+            g_free(s);
+            if (pinned)
+                JS_FreeValue(js->ctx, wrapper);
         }
         g_ptr_array_free(js->pending_ws, TRUE);
         js->pending_ws = NULL;
