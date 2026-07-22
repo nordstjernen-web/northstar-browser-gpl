@@ -59,6 +59,11 @@
   </branding>
 
   <releases>
+    <release version="1.0.3" date="2026-07-22">
+      <description>
+        <p>Rendering and stability release.</p>
+      </description>
+    </release>
     <release version="1.0.2" date="2026-07-19">
       <description>
         <p>Stability release fixing two memory-corruption bugs found with AddressSanitizer on live sites.</p>

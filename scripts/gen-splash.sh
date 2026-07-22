@@ -91,14 +91,14 @@ HW=$(magick -font DejaVu-Sans -pointsize 56 label:"Northstar" -format "%w" info:
 VX=$((80 + HW + 18))
 magick stripped.png \
   \( -size 940x320 xc:none -font DejaVu-Sans -pointsize 56 -fill white \
-     -annotate +80+98 "Northstar" -annotate +$VX+98 "1.0.2" \
+     -annotate +80+98 "Northstar" -annotate +$VX+98 "1.0.3" \
      -blur 0x2 -channel A -evaluate multiply 1.2 +channel \) \
   -compose over -composite \
   \( -size 940x320 xc:none -font DejaVu-Sans -pointsize 56 \
      -fill 'rgb(14,39,57)' -annotate +80+98 "Northstar" \) \
   -compose over -composite \
   \( -size 940x320 xc:none -font DejaVu-Sans -pointsize 56 \
-     -fill 'rgb(196,104,8)' -annotate +$VX+98 "1.0.2" \) \
+     -fill 'rgb(196,104,8)' -annotate +$VX+98 "1.0.3" \) \
   -compose over -composite \
   \( -size 940x320 xc:none -font DejaVu-Sans -pointsize 25 -fill white \
      -annotate +80+147 "Northstar Web Browser" \
