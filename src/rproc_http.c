@@ -1356,6 +1356,7 @@ ns_rproc_http_close(ns_rproc_http *r)
         close(r->sock);
 #endif
         free(r->rxbuf);
+        free(r->map);
         free(r);
         return;
     }
