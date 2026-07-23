@@ -574,7 +574,8 @@ css_wide_keyword_is(const char *kw)
            strcmp(kw, "initial") == 0 ||
            strcmp(kw, "unset") == 0 ||
            strcmp(kw, "revert") == 0 ||
-           strcmp(kw, "revert-layer") == 0;
+           strcmp(kw, "revert-layer") == 0 ||
+           strcmp(kw, "revert-rule") == 0;
 }
 
 static ns_css_value *
@@ -7671,6 +7672,7 @@ typedef enum ns_custom_prop_wide {
     NS_CUSTOM_WIDE_UNSET,
     NS_CUSTOM_WIDE_REVERT,
     NS_CUSTOM_WIDE_REVERT_LAYER,
+    NS_CUSTOM_WIDE_REVERT_RULE,
 } ns_custom_prop_wide;
 
 static ns_custom_prop_wide
@@ -7692,6 +7694,8 @@ custom_prop_wide_kind(const char *text)
         return NS_CUSTOM_WIDE_REVERT;
     if (len == 12 && g_ascii_strncasecmp(start, "revert-layer", len) == 0)
         return NS_CUSTOM_WIDE_REVERT_LAYER;
+    if (len == 11 && g_ascii_strncasecmp(start, "revert-rule", len) == 0)
+        return NS_CUSTOM_WIDE_REVERT_RULE;
     return NS_CUSTOM_WIDE_NONE;
 }
 
@@ -14648,6 +14652,12 @@ ns_css_value_serialize(const ns_css_value *v)
     return g_strdup("");
 }
 
+typedef enum ns_css_origin {
+    NS_CSS_ORIGIN_UA,
+    NS_CSS_ORIGIN_PRESENTATIONAL,
+    NS_CSS_ORIGIN_AUTHOR,
+} ns_css_origin;
+
 typedef struct match_entry {
     int          origin;
     int          spec_a, spec_b, spec_c;
@@ -14658,6 +14668,7 @@ typedef struct match_entry {
     int          decl_order;
     gboolean     important;
     gboolean     inline_style;
+    const ns_css_rule *rule;
     ns_css_value *value;
     ns_css_prop  prop;
 } match_entry;
@@ -14672,6 +14683,7 @@ typedef struct var_match {
     int decl_order;
     gboolean important;
     gboolean inline_style;
+    const ns_css_rule *rule;
     const char *name;
     const char *text;
 } var_match;
@@ -14685,6 +14697,7 @@ typedef struct pending_match {
     int source_order;
     int decl_order_base;
     gboolean inline_style;
+    const ns_css_rule *rule;
     ns_css_pending_decl *pd;
 } pending_match;
 
@@ -14694,6 +14707,15 @@ css_layer_cmp(int a, int b, gboolean important)
     if (a == b) return 0;
     if (important) return a > b ? -1 : 1;
     return a < b ? -1 : 1;
+}
+
+static gboolean
+css_same_revert_origin(int rollback_origin, int candidate_origin)
+{
+    if (rollback_origin == NS_CSS_ORIGIN_AUTHOR)
+        return candidate_origin == NS_CSS_ORIGIN_AUTHOR ||
+               candidate_origin == NS_CSS_ORIGIN_PRESENTATIONAL;
+    return rollback_origin == candidate_origin;
 }
 
 static int
@@ -14960,6 +14982,7 @@ gather_matches_multi(const ns_css_stylesheet *sheet, int origin,
                     .source_order = r->source_order,
                     .decl_order = (int)di,
                     .important = d->important,
+                    .rule = r,
                     .value = d->value,
                     .prop  = d->prop,
                 };
@@ -14983,6 +15006,7 @@ gather_matches_multi(const ns_css_stylesheet *sheet, int origin,
                         .decl_order = decl_i++,
                         .important = r->var_important &&
                                      g_hash_table_contains(r->var_important, k),
+                        .rule = r,
                         .name = (const char *)k,
                         .text = (const char *)v,
                     };
@@ -15003,6 +15027,7 @@ gather_matches_multi(const ns_css_stylesheet *sheet, int origin,
                         .scope_order = acc->scope_order[dd],
                         .source_order = r->source_order,
                         .decl_order_base = (int)(r->decls->len + pi),
+                        .rule = r,
                         .pd = pd,
                     };
                     g_array_append_val(dst->pending_out, pm);
@@ -15041,10 +15066,13 @@ var_rollback_match(GArray *matches, gint before, const var_match *rollback,
                    ns_custom_prop_wide kind)
 {
     gboolean layer_only = kind == NS_CUSTOM_WIDE_REVERT_LAYER;
+    gboolean rule_only = kind == NS_CUSTOM_WIDE_REVERT_RULE;
     for (gint j = before; j >= 0; j--) {
         var_match *prev = &g_array_index(matches, var_match, (guint)j);
         if (!prev->name || strcmp(prev->name, rollback->name) != 0) continue;
-        if (layer_only) {
+        if (rule_only) {
+            if (prev->rule == rollback->rule) continue;
+        } else if (layer_only) {
             if (prev->origin == rollback->origin) {
                 if (rollback->inline_style) {
                     if (prev->inline_style)
@@ -15056,12 +15084,13 @@ var_rollback_match(GArray *matches, gint before, const var_match *rollback,
                     continue;
                 }
             }
-        } else if (prev->origin == rollback->origin) {
+        } else if (css_same_revert_origin(rollback->origin, prev->origin)) {
             continue;
         }
         ns_custom_prop_wide prev_kind = custom_prop_wide_kind(prev->text);
         if (prev_kind == NS_CUSTOM_WIDE_REVERT ||
-            prev_kind == NS_CUSTOM_WIDE_REVERT_LAYER)
+            prev_kind == NS_CUSTOM_WIDE_REVERT_LAYER ||
+            prev_kind == NS_CUSTOM_WIDE_REVERT_RULE)
             return var_rollback_match(matches, j - 1, prev, prev_kind);
         return prev;
     }
@@ -15074,7 +15103,8 @@ var_resolved_match(GArray *matches, guint index)
     var_match *match = &g_array_index(matches, var_match, index);
     ns_custom_prop_wide kind = custom_prop_wide_kind(match->text);
     if (kind == NS_CUSTOM_WIDE_REVERT ||
-        kind == NS_CUSTOM_WIDE_REVERT_LAYER)
+        kind == NS_CUSTOM_WIDE_REVERT_LAYER ||
+        kind == NS_CUSTOM_WIDE_REVERT_RULE)
         return var_rollback_match(matches, (gint)index - 1, match, kind);
     return match;
 }
@@ -15368,6 +15398,7 @@ resolve_pending_into_matches(GArray *pending_matches,
                 .decl_order = pm->decl_order_base + (int)i,
                 .important = pm->pd->important || d->important,
                 .inline_style = pm->inline_style,
+                .rule = pm->rule,
                 .value = d->value,
                 .prop  = d->prop,
             };
@@ -15723,15 +15754,25 @@ value_is_revert_layer(const ns_css_value *v)
            strcmp(v->u.keyword, "revert-layer") == 0;
 }
 
+static gboolean
+value_is_revert_rule(const ns_css_value *v)
+{
+    return v && v->kind == NS_CSS_V_KEYWORD && v->u.keyword &&
+           strcmp(v->u.keyword, "revert-rule") == 0;
+}
+
 static const ns_css_value *
 cascade_rollback_value(GArray *matches, gint before,
                        const match_entry *rollback)
 {
     gboolean layer_only = value_is_revert_layer(rollback->value);
+    gboolean rule_only = value_is_revert_rule(rollback->value);
     for (gint j = before; j >= 0; j--) {
         match_entry *prev = &g_array_index(matches, match_entry, (guint)j);
         if (prev->prop != rollback->prop) continue;
-        if (layer_only) {
+        if (rule_only) {
+            if (prev->rule == rollback->rule) continue;
+        } else if (layer_only) {
             if (prev->origin == rollback->origin) {
                 if (rollback->inline_style) {
                     if (prev->inline_style)
@@ -15743,11 +15784,12 @@ cascade_rollback_value(GArray *matches, gint before,
                     continue;
                 }
             }
-        } else if (prev->origin == rollback->origin) {
+        } else if (css_same_revert_origin(rollback->origin, prev->origin)) {
             continue;
         }
         if (value_is_revert(prev->value) ||
-            value_is_revert_layer(prev->value))
+            value_is_revert_layer(prev->value) ||
+            value_is_revert_rule(prev->value))
             return cascade_rollback_value(matches, j - 1, prev);
         return prev->value;
     }
@@ -15761,7 +15803,8 @@ cascade_for(GArray *matches, ns_style *out, const ns_style *parent_style,
     g_array_sort(matches, match_cmp);
     for (guint i = 0; i < matches->len; i++) {
         match_entry *m = &g_array_index(matches, match_entry, i);
-        if (value_is_revert(m->value) || value_is_revert_layer(m->value)) {
+        if (value_is_revert(m->value) || value_is_revert_layer(m->value) ||
+            value_is_revert_rule(m->value)) {
             const ns_css_value *fallback =
                 cascade_rollback_value(matches, (gint)i - 1, m);
             ns_css_value_free(out->values[m->prop]);
@@ -16911,6 +16954,9 @@ share_key_put_matches(GByteArray *b, const GArray *arr)
         const match_entry *e = &g_array_index((GArray *)arr, match_entry, i);
         g_byte_array_append(b, (const guint8 *)&e->origin, sizeof(int) * 9);
         g_byte_array_append(b, (const guint8 *)&e->important, sizeof e->important);
+        g_byte_array_append(b, (const guint8 *)&e->inline_style,
+                            sizeof e->inline_style);
+        g_byte_array_append(b, (const guint8 *)&e->rule, sizeof e->rule);
         g_byte_array_append(b, (const guint8 *)&e->value, sizeof e->value);
         g_byte_array_append(b, (const guint8 *)&e->prop, sizeof e->prop);
     }
@@ -16925,6 +16971,9 @@ share_key_put_vars(GByteArray *b, const GArray *arr)
         const var_match *e = &g_array_index((GArray *)arr, var_match, i);
         g_byte_array_append(b, (const guint8 *)&e->origin, sizeof(int) * 9);
         g_byte_array_append(b, (const guint8 *)&e->important, sizeof e->important);
+        g_byte_array_append(b, (const guint8 *)&e->inline_style,
+                            sizeof e->inline_style);
+        g_byte_array_append(b, (const guint8 *)&e->rule, sizeof e->rule);
         g_byte_array_append(b, (const guint8 *)&e->name, sizeof e->name);
         g_byte_array_append(b, (const guint8 *)&e->text, sizeof e->text);
     }
@@ -16938,6 +16987,9 @@ share_key_put_pending(GByteArray *b, const GArray *arr)
     for (guint i = 0; i < n; i++) {
         const pending_match *e = &g_array_index((GArray *)arr, pending_match, i);
         g_byte_array_append(b, (const guint8 *)&e->origin, sizeof(int) * 9);
+        g_byte_array_append(b, (const guint8 *)&e->inline_style,
+                            sizeof e->inline_style);
+        g_byte_array_append(b, (const guint8 *)&e->rule, sizeof e->rule);
         g_byte_array_append(b, (const guint8 *)&e->pd, sizeof e->pd);
     }
 }
@@ -17093,10 +17145,12 @@ cascade_walk(ns_node *node,
             dests[n_pe + 1].pending_out = pg->p;
             n_pe++;
         }
-        gather_matches_multi(ua, 0, 0, node, dests, (guint)n_pe + 1,
+        gather_matches_multi(ua, NS_CSS_ORIGIN_UA, 0, node, dests,
+                             (guint)n_pe + 1,
                              layer_ranks);
         for (gsize i = 0; i < n_author; i++)
-            gather_matches_multi(author[i], 1, (int)(i + 1), node, dests,
+            gather_matches_multi(author[i], NS_CSS_ORIGIN_AUTHOR,
+                                 (int)(i + 1), node, dests,
                                  (guint)n_pe + 1, layer_ranks);
 
         char *pres_css = presentational_hints_css(node);
@@ -17111,12 +17165,13 @@ cascade_walk(ns_node *node,
                 for (guint di = 0; di < r->decls->len; di++) {
                     ns_css_decl *d = &g_array_index(r->decls, ns_css_decl, di);
                     match_entry e = {
-                        .origin = 1,
+                        .origin = NS_CSS_ORIGIN_PRESENTATIONAL,
                         .spec_a = 0, .spec_b = 0, .spec_c = 0,
                         .layer_order = NS_CSS_LAYER_NONE,
                         .source_order = INT_MIN,
                         .decl_order = (int)di,
                         .important = d->important,
+                        .rule = r,
                         .value = d->value,
                         .prop  = d->prop,
                     };
@@ -17127,13 +17182,15 @@ cascade_walk(ns_node *node,
                     g_hash_table_iter_init(&it, r->vars);
                     while (g_hash_table_iter_next(&it, &k, &v)) {
                         var_match vm = {
-                            .origin = 1, .spec_a = 0, .spec_b = 0, .spec_c = 0,
+                            .origin = NS_CSS_ORIGIN_PRESENTATIONAL,
+                            .spec_a = 0, .spec_b = 0, .spec_c = 0,
                             .sheet_index = 0,
                             .layer_order = NS_CSS_LAYER_NONE,
                             .source_order = INT_MIN,
                             .decl_order = di_v++,
                             .important = r->var_important &&
                                 g_hash_table_contains(r->var_important, k),
+                            .rule = r,
                             .name = (const char *)k,
                             .text = (const char *)v,
                         };
@@ -17145,11 +17202,13 @@ cascade_walk(ns_node *node,
                         ns_css_pending_decl *pd =
                             &g_array_index(r->pending, ns_css_pending_decl, pi);
                         pending_match pm = {
-                            .origin = 1, .spec_a = 0, .spec_b = 0, .spec_c = 0,
+                            .origin = NS_CSS_ORIGIN_PRESENTATIONAL,
+                            .spec_a = 0, .spec_b = 0, .spec_c = 0,
                             .sheet_index = 0,
                             .layer_order = NS_CSS_LAYER_NONE,
                             .source_order = INT_MIN,
                             .decl_order_base = (int)(r->decls->len + pi),
+                            .rule = r,
                             .pd = pd,
                         };
                         g_array_append_val(pending_matches, pm);
@@ -17168,13 +17227,14 @@ cascade_walk(ns_node *node,
                 for (guint di = 0; di < r->decls->len; di++) {
                     ns_css_decl *d = &g_array_index(r->decls, ns_css_decl, di);
                     match_entry e = {
-                        .origin = 1,
+                        .origin = NS_CSS_ORIGIN_AUTHOR,
                         .spec_a = 1000, .spec_b = 0, .spec_c = 0,
                         .layer_order = NS_CSS_LAYER_NONE,
                         .source_order = INT_MAX,
                         .decl_order = (int)di,
                         .important = d->important,
                         .inline_style = TRUE,
+                        .rule = r,
                         .value = d->value,
                         .prop  = d->prop,
                     };
@@ -17185,7 +17245,8 @@ cascade_walk(ns_node *node,
                     g_hash_table_iter_init(&it, r->vars);
                     while (g_hash_table_iter_next(&it, &k, &v)) {
                         var_match vm = {
-                            .origin = 1, .spec_a = 1000, .spec_b = 0, .spec_c = 0,
+                            .origin = NS_CSS_ORIGIN_AUTHOR,
+                            .spec_a = 1000, .spec_b = 0, .spec_c = 0,
                             .sheet_index = 0,
                             .layer_order = NS_CSS_LAYER_NONE,
                             .source_order = INT_MAX,
@@ -17193,6 +17254,7 @@ cascade_walk(ns_node *node,
                             .important = r->var_important &&
                                 g_hash_table_contains(r->var_important, k),
                             .inline_style = TRUE,
+                            .rule = r,
                             .name = (const char *)k,
                             .text = (const char *)v,
                         };
@@ -17204,12 +17266,14 @@ cascade_walk(ns_node *node,
                         ns_css_pending_decl *pd =
                             &g_array_index(r->pending, ns_css_pending_decl, pi);
                         pending_match pm = {
-                            .origin = 1, .spec_a = 1000, .spec_b = 0, .spec_c = 0,
+                            .origin = NS_CSS_ORIGIN_AUTHOR,
+                            .spec_a = 1000, .spec_b = 0, .spec_c = 0,
                             .sheet_index = 0,
                             .layer_order = NS_CSS_LAYER_NONE,
                             .source_order = INT_MAX,
                             .decl_order_base = (int)(r->decls->len + pi),
                             .inline_style = TRUE,
+                            .rule = r,
                             .pd = pd,
                         };
                         g_array_append_val(pending_matches, pm);
