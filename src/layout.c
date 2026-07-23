@@ -89,9 +89,7 @@ height_is_percent(const ns_css_value *v)
 static gboolean
 box_is_doc_root(const ns_box *b)
 {
-    return b && b->dom && b->dom->name &&
-           (strcmp(b->dom->name, "html") == 0 ||
-            strcmp(b->dom->name, "body") == 0);
+    return b && ns_node_is_element_named(b->dom, "html");
 }
 
 static double containing_block_definite_height(const ns_box *box);
@@ -4229,6 +4227,7 @@ build_pseudo_inline_for(const ns_style *ps, const ns_node *host)
 
     if (inline_atomic) {
         ns_box *inner = box_new(NS_BOX_BLOCK);
+        inner->dom = host;
         inner->style = ps;
         collect_box_bg_image(inner, ps);
         if (txt && *txt) {
@@ -4250,6 +4249,7 @@ build_pseudo_inline_for(const ns_style *ps, const ns_node *host)
     }
 
     ns_box *box = box_new_inline();
+    box->dom = host;
     box->text = g_strdup(txt);
     g_free(quote);
     g_free(resolved);
@@ -4501,6 +4501,7 @@ build_pseudo_block_for(const ns_style *ps, const ns_node *host)
     if (!disp || strcmp(disp, "none") == 0 || strncmp(disp, "inline", 6) == 0)
         return NULL;
     ns_box *pb = box_new(NS_BOX_BLOCK);
+    pb->dom = host;
     pb->style = ps;
     collect_box_bg_image(pb, ps);
     return pb;
@@ -6156,6 +6157,28 @@ box_blocks_hit_testing(const ns_box *b)
     return b && style_blocks_hit_testing(b->style);
 }
 
+static gboolean
+box_is_table_hit_internal(const ns_box *box)
+{
+    if (!box) return FALSE;
+    if (box->kind == NS_BOX_TABLE_ROW) return TRUE;
+    const ns_node *dom = box->dom;
+    return ns_node_is_element_named(dom, "tr") ||
+           ns_node_is_element_named(dom, "tbody") ||
+           ns_node_is_element_named(dom, "thead") ||
+           ns_node_is_element_named(dom, "tfoot");
+}
+
+static gboolean
+box_hit_uses_border_bounds(const ns_box *box)
+{
+    return box && (box->kind == NS_BOX_BLOCK ||
+                   box->kind == NS_BOX_TABLE ||
+                   box->kind == NS_BOX_TABLE_CAPTION ||
+                   box->kind == NS_BOX_TABLE_ROW ||
+                   box->kind == NS_BOX_TABLE_CELL);
+}
+
 static int
 hit_box_stack_key(const ns_box *b)
 {
@@ -7156,6 +7179,8 @@ layout_table(ns_box *box, double parent_content_width, const ns_style *inherited
     double inner_y = box->y + box->margin.top  + box->border.top  + box->padding.top;
     double cursor_y = inner_y;
     const ns_style *child_inherited = box->style ? box->style : inherited_style;
+    gboolean rtl = keyword_is(box->style
+        ? box->style->values[NS_CSS_DIRECTION] : NULL, "rtl");
 
     layout_table_captions(box, FALSE, inner_x, cw, child_inherited, &cursor_y);
     cursor_y += vsp;
@@ -7186,7 +7211,14 @@ layout_table(ns_box *box, double parent_content_width, const ns_style *inherited
                     rs_cell[col + i] = cell;
                 }
             }
-            cell->x = inner_x + (col < max_cols ? col_x[col] : 0);
+            if (rtl && col < max_cols) {
+                double from_right = hsp;
+                for (guint i = 0; i < col; i++)
+                    from_right += col_widths[i] + hsp;
+                cell->x = inner_x + cw - from_right - cell_outer_w;
+            } else {
+                cell->x = inner_x + (col < max_cols ? col_x[col] : 0);
+            }
             cell->y = cursor_y;
             const ns_style *cs = cell->style ? cell->style : child_inherited;
             edges_from_style(cell->style, cell_outer_w,
@@ -7350,6 +7382,26 @@ layout_table(ns_box *box, double parent_content_width, const ns_style *inherited
                 shift += per;
             }
             box->content_height = target;
+        }
+    }
+    int writing_mode = ns_css_writing_mode(box->style);
+    if (writing_mode) {
+        for (ns_box *row = box->first_child; row; row = row->next_sibling) {
+            if (row->kind != NS_BOX_TABLE_ROW) continue;
+            for (ns_box *cell = row->first_child; cell; cell = cell->next_sibling) {
+                if (cell->kind != NS_BOX_TABLE_CELL) continue;
+                double old_x = cell->x;
+                double old_y = cell->y;
+                double old_w = cell->content_width;
+                double old_h = cell->content_height;
+                double new_x = writing_mode == 2
+                    ? inner_x + old_y - inner_y
+                    : inner_x + box->content_width - (old_y - inner_y) - old_h;
+                double new_y = inner_y + old_x - inner_x;
+                translate_subtree(cell, new_x - old_x, new_y - old_y);
+                cell->content_width = old_h;
+                cell->content_height = old_w;
+            }
         }
     }
 }
@@ -10838,6 +10890,14 @@ box_can_host_fixed(const ns_box *anc)
 }
 
 static gboolean
+mat4_maps_xy_plane_affinely(const ns_mat4 *m)
+{
+    const double epsilon = 1e-9;
+    return m && fabs(m->m[12]) < epsilon && fabs(m->m[13]) < epsilon &&
+           fabs(m->m[15] - 1.0) < epsilon;
+}
+
+static gboolean
 box_hit_untransform_point(const ns_box *b, double *x, double *y)
 {
     const ns_style *s = b->style;
@@ -10866,7 +10926,7 @@ box_hit_untransform_point(const ns_box *b, double *x, double *y)
     }
     ns_mat4 m;
     ns_css_transform_to_mat4(&eff, bw, bh, &m);
-    if (!ns_mat4_is_affine2d(&m)) return TRUE;
+    if (!mat4_maps_xy_plane_affinely(&m)) return TRUE;
     cairo_matrix_t cm;
     cairo_matrix_init(&cm, m.m[0], m.m[4], m.m[1], m.m[5], m.m[3], m.m[7]);
     if (cairo_matrix_invert(&cm) != CAIRO_STATUS_SUCCESS) return FALSE;
@@ -10919,6 +10979,7 @@ process_absolute_boxes(ns_box *root, GHashTable *styles, double viewport_width)
         ns_box *abox;
         if (e.pseudo) {
             abox = box_new(NS_BOX_BLOCK);
+            abox->dom = e.dom;
             abox->style = e.pseudo;
             collect_box_bg_image(abox, e.pseudo);
             ns_box *gen = build_pseudo_inline_for(e.pseudo, e.dom);
@@ -11404,8 +11465,7 @@ ns_box_hit_test(const ns_box *root, double x, double y)
         }
     if (best) return best;
 self_test: ;
-    gboolean block_edges = root->kind == NS_BOX_BLOCK ||
-                           root->kind == NS_BOX_TABLE_CAPTION;
+    gboolean block_edges = box_hit_uses_border_bounds(root);
     double x0 = root->x + (block_edges ? root->margin.left : 0);
     double y0 = root->y + (block_edges ? root->margin.top : 0);
     double x1 = x0 + root->content_width
@@ -11414,10 +11474,112 @@ self_test: ;
     double y1 = y0 + root->content_height
               + (block_edges ? root->padding.top + root->padding.bottom +
                                root->border.top + root->border.bottom : 0);
-    if (!box_blocks_hit_testing(root) &&
-        x >= x0 && x <= x1 && y >= y0 && y <= y1 && root->dom)
+    gboolean inside_x = x >= x0 &&
+        (root->kind == NS_BOX_TABLE_CELL ? x < x1 : x <= x1);
+    gboolean inside_y = y >= y0 &&
+        (root->kind == NS_BOX_TABLE_CELL ? y < y1 : y <= y1);
+    if (!box_blocks_hit_testing(root) && !box_is_table_hit_internal(root) &&
+        inside_x && inside_y && root->dom)
         return root;
     return NULL;
+}
+
+typedef struct {
+    const ns_node *dom;
+    int key;
+    guint order;
+} dom_hit_entry;
+
+static int
+dom_hit_entry_cmp(const void *a, const void *b)
+{
+    const dom_hit_entry *pa = a, *pb = b;
+    if (pa->key != pb->key) return pa->key < pb->key ? -1 : 1;
+    if (pa->order != pb->order) return pa->order < pb->order ? -1 : 1;
+    return 0;
+}
+
+static void
+box_hit_stack_add(GArray *hits, const ns_box *box)
+{
+    if (!hits || !box || !box->dom) return;
+    dom_hit_entry entry = {
+        .dom = box->dom,
+        .key = hit_box_stack_key(box),
+        .order = hits->len,
+    };
+    g_array_append_val(hits, entry);
+}
+
+static void
+box_hit_stack_walk(const ns_box *root, double x, double y, GArray *hits)
+{
+    if (!root || !hits) return;
+    if (!box_hit_untransform_point(root, &x, &y)) return;
+    if (root->paint_bottom > root->paint_top &&
+        (y < root->paint_top - 1.0 || y > root->paint_bottom + 1.0))
+        return;
+
+    if (ns_paint_3d_registered(root)) {
+        const ns_box *picked = ns_paint_3d_pick(root, x, y);
+        if (picked && picked->dom && !box_blocks_hit_testing(picked))
+            box_hit_stack_add(hits, picked);
+        return;
+    }
+
+    gboolean block_edges = box_hit_uses_border_bounds(root);
+    double x0 = root->x + (block_edges ? root->margin.left : 0);
+    double y0 = root->y + (block_edges ? root->margin.top : 0);
+    double x1 = x0 + root->content_width
+              + (block_edges ? root->padding.left + root->padding.right +
+                               root->border.left + root->border.right : 0);
+    double y1 = y0 + root->content_height
+              + (block_edges ? root->padding.top + root->padding.bottom +
+                               root->border.top + root->border.bottom : 0);
+    gboolean inside_x = x >= x0 &&
+        (root->kind == NS_BOX_TABLE_CELL ? x < x1 : x <= x1);
+    gboolean inside_y = y >= y0 &&
+        (root->kind == NS_BOX_TABLE_CELL ? y < y1 : y <= y1);
+    if (!box_blocks_hit_testing(root) && !box_is_table_hit_internal(root) && root->dom &&
+        inside_x && inside_y)
+        box_hit_stack_add(hits, root);
+
+    if (box_clips_children(root) && !box_padding_contains(root, x, y))
+        return;
+    double cx = x + root->scroll_x;
+    double cy = y + root->scroll_y;
+    guint sn = 0;
+    const ns_box **stacked = hit_children_stacked(root, &sn);
+    if (stacked) {
+        for (guint i = 0; i < sn; i++)
+            box_hit_stack_walk(stacked[i], cx, cy, hits);
+        g_free(stacked);
+    } else {
+        for (const ns_box *c = root->first_child; c; c = c->next_sibling)
+            box_hit_stack_walk(c, cx, cy, hits);
+    }
+    if (root->inline_atomics)
+        for (guint i = 0; i < root->inline_atomics->len; i++) {
+            const ns_box *ab =
+                g_array_index(root->inline_atomics, ns_inline_atomic, i).box;
+            if (ab) box_hit_stack_walk(ab, cx, cy, hits);
+        }
+}
+
+GPtrArray *
+ns_box_hit_dom_stack(const ns_box *root, double x, double y)
+{
+    GArray *entries = g_array_new(FALSE, FALSE, sizeof(dom_hit_entry));
+    box_hit_stack_walk(root, x, y, entries);
+    g_array_sort(entries, dom_hit_entry_cmp);
+    GPtrArray *hits = g_ptr_array_sized_new(entries->len);
+    for (guint i = entries->len; i > 0; i--) {
+        const dom_hit_entry *entry =
+            &g_array_index(entries, dom_hit_entry, i - 1);
+        g_ptr_array_add(hits, (gpointer)entry->dom);
+    }
+    g_array_free(entries, TRUE);
+    return hits;
 }
 
 const ns_box *

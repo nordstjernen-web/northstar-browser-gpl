@@ -168,6 +168,13 @@ static void ns_ce_upgrade_subtree_all(ns_js *js, ns_node *root);
 static void ns_ce_upgrade_subtree_detached(ns_js *js, ns_node *root);
 static void ns_ce_disconnect_subtree(ns_js *js, ns_node *root);
 static gboolean ns_ce_constructor_registered(ns_js *js, JSValueConst ctor);
+static const ns_node *ns_node_owner_iframe(const ns_node *n);
+static JSValue ns_document_element_from_point(JSContext *ctx,
+                                              JSValueConst this_val,
+                                              int argc, JSValueConst *argv);
+static JSValue ns_document_elements_from_point(JSContext *ctx,
+                                               JSValueConst this_val,
+                                               int argc, JSValueConst *argv);
 static void ns_js_emit_audio(ns_js *js, const char *fmt, ...) G_GNUC_PRINTF(2, 3);
 static ns_worker_host *ns_sw_controller_for(ns_js *js, const char *abs_url);
 static void ns_sw_post_fetch_request(ns_worker_host *host, guint id,
@@ -3407,14 +3414,49 @@ static const ns_instof_def ns_instof_table[] = {
 };
 
 static JSValue
-ns_ctor_hasInstance(JSContext *ctx, JSValueConst this_val,
-                    int argc, JSValueConst *argv, int magic)
+ns_ctor_ordinary_has_instance(JSContext *ctx, JSValueConst ctor,
+                              JSValueConst value)
 {
-    (void)this_val;
+    if (!JS_IsObject(value)) return JS_FALSE;
+    JSValue prototype = JS_GetPropertyStr(ctx, ctor, "prototype");
+    if (JS_IsException(prototype)) return prototype;
+    if (!JS_IsObject(prototype)) {
+        JS_FreeValue(ctx, prototype);
+        return JS_ThrowTypeError(ctx,
+            "Function has non-object prototype in instanceof check");
+    }
+    JSValue current = JS_GetPrototype(ctx, value);
+    while (JS_IsObject(current)) {
+        if (JS_IsStrictEqual(ctx, current, prototype)) {
+            JS_FreeValue(ctx, current);
+            JS_FreeValue(ctx, prototype);
+            return JS_TRUE;
+        }
+        JSValue next = JS_GetPrototype(ctx, current);
+        JS_FreeValue(ctx, current);
+        current = next;
+    }
+    JS_FreeValue(ctx, current);
+    JS_FreeValue(ctx, prototype);
+    return JS_FALSE;
+}
+
+static JSValue
+ns_ctor_hasInstance(JSContext *ctx, JSValueConst this_val,
+                     int argc, JSValueConst *argv, int magic)
+{
     if (argc < 1 || magic < 0 ||
         magic >= (int)G_N_ELEMENTS(ns_instof_table))
         return JS_FALSE;
     const ns_instof_def *d = &ns_instof_table[magic];
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue native_ctor = JS_GetPropertyStr(ctx, global, d->ctor);
+    JS_FreeValue(ctx, global);
+    gboolean direct = JS_IsObject(native_ctor) &&
+                      JS_IsStrictEqual(ctx, this_val, native_ctor);
+    JS_FreeValue(ctx, native_ctor);
+    if (!direct)
+        return ns_ctor_ordinary_has_instance(ctx, this_val, argv[0]);
     if (d->special == NS_INSTOF_HTMLCOLLECTION)
         return JS_NewBool(ctx, ns_live_collection_kind(argv[0]) == 1);
     if (d->special == NS_INSTOF_NODELIST) {
@@ -29155,6 +29197,31 @@ ns_box_accumulate_transform(const ns_box *box, ns_mat4 *out)
     return any;
 }
 
+static void
+ns_box_visual_border_box(const ns_box *box,
+                         double *x, double *y, double *w, double *h)
+{
+    ns_box_border_box(box, x, y, w, h);
+    ns_mat4 transform;
+    if (!ns_box_accumulate_transform(box, &transform)) return;
+    double cx[4] = { *x, *x + *w, *x, *x + *w };
+    double cy[4] = { *y, *y, *y + *h, *y + *h };
+    double min_x = 1e18, min_y = 1e18, max_x = -1e18, max_y = -1e18;
+    for (int i = 0; i < 4; i++) {
+        double px, py, pz, pw;
+        ns_mat4_apply(&transform, cx[i], cy[i], 0, &px, &py, &pz, &pw);
+        if (fabs(pw) > 1e-9) { px /= pw; py /= pw; }
+        if (px < min_x) min_x = px;
+        if (px > max_x) max_x = px;
+        if (py < min_y) min_y = py;
+        if (py > max_y) max_y = py;
+    }
+    *x = min_x;
+    *y = min_y;
+    *w = max_x - min_x;
+    *h = max_y - min_y;
+}
+
 static double ns_window_scroll_prop(JSContext *ctx, const char *prop);
 
 static JSValue
@@ -29167,28 +29234,24 @@ ns_element_getBoundingClientRect(JSContext *ctx, JSValueConst this_val,
     gboolean got_box = b != NULL;
     if (!b && ns_inline_rect_for_this(ctx, this_val, &x, &y, &w, &h))
         got_box = TRUE;
-    if (b) {
-        ns_box_border_box(b, &x, &y, &w, &h);
-        ns_mat4 tf;
-        if (ns_box_accumulate_transform(b, &tf)) {
-            double cx[4] = { x, x + w, x, x + w };
-            double cy[4] = { y, y, y + h, y + h };
-            double minx = 1e18, miny = 1e18, maxx = -1e18, maxy = -1e18;
-            for (int i = 0; i < 4; i++) {
-                double px, py, pz, pw;
-                ns_mat4_apply(&tf, cx[i], cy[i], 0, &px, &py, &pz, &pw);
-                if (fabs(pw) > 1e-9) { px /= pw; py /= pw; }
-                if (px < minx) minx = px;
-                if (px > maxx) maxx = px;
-                if (py < miny) miny = py;
-                if (py > maxy) maxy = py;
-            }
-            x = minx; y = miny; w = maxx - minx; h = maxy - miny;
-        }
-    }
+    if (b) ns_box_visual_border_box(b, &x, &y, &w, &h);
     if (got_box) {
         x -= ns_window_scroll_prop(ctx, "scrollX");
         y -= ns_window_scroll_prop(ctx, "scrollY");
+        const ns_node *node = ns_unwrap_element(this_val);
+        const ns_node *iframe = ns_node_owner_iframe(node);
+        ns_js *js = js_from_ctx(ctx);
+        const ns_box *iframe_box = js && js->layout_root && iframe
+            ? ns_box_find_by_dom(js->layout_root, iframe) : NULL;
+        if (iframe_box) {
+            double frame_x, frame_y, frame_w, frame_h;
+            ns_box_visual_border_box(iframe_box, &frame_x, &frame_y,
+                                     &frame_w, &frame_h);
+            frame_x -= ns_window_scroll_prop(ctx, "scrollX");
+            frame_y -= ns_window_scroll_prop(ctx, "scrollY");
+            x -= frame_x;
+            y -= frame_y;
+        }
     }
     return ns_make_dom_rect(ctx, x, y, w, h);
 }
@@ -31208,6 +31271,10 @@ ns_shadow_root_define_props(JSContext *ctx, JSValueConst wrapper)
                          "get mode", 0, JS_CFUNC_generic, 0),
         JS_UNDEFINED, JS_PROP_CONFIGURABLE);
     JS_FreeAtom(ctx, mode_atom);
+    ns_bind_fn(ctx, wrapper, "elementFromPoint",
+               ns_document_element_from_point, 2);
+    ns_bind_fn(ctx, wrapper, "elementsFromPoint",
+               ns_document_elements_from_point, 2);
 }
 
 static JSValue
@@ -38455,6 +38522,41 @@ ns_point_in_hit_bounds(ns_js *js, double x, double y)
     return x <= w && y <= h;
 }
 
+static const ns_node *
+ns_hit_target_in_scope(const ns_node *node, const ns_node *scope)
+{
+    const ns_node *target = node;
+    for (const ns_node *p = node; p; p = p->parent) {
+        if (p == scope) return target;
+        if (ns_node_is_element_named(p, "iframe")) target = p;
+        if (p->kind == NS_NODE_ELEMENT &&
+            ns_element_get_attr(p, NS_SHADOW_ATTR))
+            target = p->parent ? p->parent : p;
+    }
+    return scope ? NULL : target;
+}
+
+static gboolean
+ns_hit_point_to_layout(JSContext *ctx, ns_js *js, const ns_node *scope,
+                       double *x, double *y)
+{
+    const ns_node *iframe = ns_node_owner_iframe(scope);
+    if (!iframe) {
+        if (!ns_point_in_hit_bounds(js, *x, *y)) return FALSE;
+        *x += ns_window_scroll_prop(ctx, "scrollX");
+        *y += ns_window_scroll_prop(ctx, "scrollY");
+        return TRUE;
+    }
+    const ns_box *box = ns_box_find_by_dom(js->layout_root, iframe);
+    if (!box || *x > box->content_width || *y > box->content_height)
+        return FALSE;
+    double origin_x, origin_y, width, height;
+    ns_box_visual_border_box(box, &origin_x, &origin_y, &width, &height);
+    *x += origin_x;
+    *y += origin_y;
+    return TRUE;
+}
+
 static JSValue
 ns_document_element_from_point(JSContext *ctx, JSValueConst this_val,
                                int argc, JSValueConst *argv)
@@ -38474,10 +38576,12 @@ ns_document_element_from_point(JSContext *ctx, JSValueConst this_val,
     if (!js || !js->current_doc) return JS_NULL;
     ns_js_flush_layout(js);
     if (!js->layout_root) return JS_NULL;
-    if (!ns_point_in_hit_bounds(js, x, y)) return JS_NULL;
-    x += ns_window_scroll_prop(ctx, "scrollX");
-    y += ns_window_scroll_prop(ctx, "scrollY");
+    const ns_node *scope = ns_unwrap_element(this_val);
+    if (!scope) scope = js->current_doc;
+    if (!scope) return JS_NULL;
+    if (!ns_hit_point_to_layout(ctx, js, scope, &x, &y)) return JS_NULL;
     const ns_node *hit = ns_box_hit_dom(js->layout_root, x, y);
+    hit = ns_hit_target_in_scope(hit, scope);
     return hit ? ns_make_element(ctx, hit) : JS_NULL;
 }
 
@@ -38501,14 +38605,53 @@ ns_document_elements_from_point(JSContext *ctx, JSValueConst this_val,
     if (!js || !js->current_doc) return arr;
     ns_js_flush_layout(js);
     if (!js->layout_root) return arr;
-    if (!ns_point_in_hit_bounds(js, x, y)) return arr;
-    x += ns_window_scroll_prop(ctx, "scrollX");
-    y += ns_window_scroll_prop(ctx, "scrollY");
-    const ns_node *hit = ns_box_hit_dom(js->layout_root, x, y);
+    const ns_node *scope = ns_unwrap_element(this_val);
+    if (!scope) scope = js->current_doc;
+    if (!scope) return arr;
+    if (!ns_hit_point_to_layout(ctx, js, scope, &x, &y)) return arr;
+    GPtrArray *hits = ns_box_hit_dom_stack(js->layout_root, x, y);
+    const ns_node *refined = ns_box_hit_dom(js->layout_root, x, y);
+    refined = ns_hit_target_in_scope(refined, scope);
+    const ns_node *root = scope->kind == NS_NODE_DOCUMENT
+        ? ns_node_find_first_element(scope, "html") : NULL;
+    gboolean root_emitted = FALSE;
+    const ns_node *last_emitted = NULL;
     uint32_t i = 0;
-    for (const ns_node *n = hit; n; n = n->parent)
-        if (n->kind == NS_NODE_ELEMENT)
+    if (refined) {
+        GPtrArray *prefix = g_ptr_array_new();
+        for (const ns_node *n = refined; n; n = n->parent) {
+            gboolean present = FALSE;
+            for (guint j = 0; j < hits->len; j++)
+                if (g_ptr_array_index(hits, j) == n) {
+                    present = TRUE;
+                    break;
+                }
+            if (present) break;
+            if (n->kind == NS_NODE_ELEMENT) g_ptr_array_add(prefix, (gpointer)n);
+        }
+        for (guint j = 0; j < prefix->len; j++) {
+            const ns_node *n = g_ptr_array_index(prefix, j);
+            n = ns_hit_target_in_scope(n, scope);
+            if (!n || n == last_emitted) continue;
             JS_SetPropertyUint32(ctx, arr, i++, ns_make_element(ctx, n));
+            last_emitted = n;
+            if (n == root) root_emitted = TRUE;
+        }
+        g_ptr_array_free(prefix, TRUE);
+    }
+    for (guint j = 0; j < hits->len; j++) {
+        const ns_node *n = g_ptr_array_index(hits, j);
+        n = ns_hit_target_in_scope(n, scope);
+        if (n && n->kind == NS_NODE_ELEMENT) {
+            if (n == last_emitted) continue;
+            JS_SetPropertyUint32(ctx, arr, i++, ns_make_element(ctx, n));
+            last_emitted = n;
+            if (n == root) root_emitted = TRUE;
+        }
+    }
+    if (root && !root_emitted)
+        JS_SetPropertyUint32(ctx, arr, i++, ns_make_element(ctx, root));
+    g_ptr_array_free(hits, TRUE);
     return arr;
 }
 
@@ -44068,6 +44211,8 @@ ns_make_realm_document(JSContext *ctx, ns_node *doc_node, const char *url,
                ns_element_getElementsByClassName, 1);
     ns_bind_fn(ctx, w, "createTreeWalker",   ns_document_create_tree_walker,   3);
     ns_bind_fn(ctx, w, "createNodeIterator", ns_document_create_node_iterator, 3);
+    ns_bind_fn(ctx, w, "elementFromPoint",   ns_document_element_from_point, 2);
+    ns_bind_fn(ctx, w, "elementsFromPoint",  ns_document_elements_from_point, 2);
     return w;
 }
 
