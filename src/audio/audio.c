@@ -2,7 +2,9 @@
  * Copyright 2026 Andreas Røsdal
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #define SDL_MAIN_HANDLED
 #include "audio.h"
 
