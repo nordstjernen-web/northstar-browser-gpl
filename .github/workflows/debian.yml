@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        debian: ['13']
+        debian: ['13', 'sid']
 
     env:
       DEBIAN_FRONTEND: noninteractive
