@@ -224,7 +224,12 @@ libwuffs = dependency('wuffs', fallback: ['wuffs', 'wuffs_dep'])
 libplmpeg = dependency('plmpeg', fallback: ['plmpeg', 'plmpeg_dep'])
 zlib = dependency('zlib')
 
-lexbor_version = '3.0.0'
+liblexbor = dependency('lexbor', version: '>=3.0.0', required: false)
+if liblexbor.found()
+  lexbor_version = liblexbor.version()
+else
+  lexbor_version = '3.0.0'
+endif
 add_project_arguments('-DNS_LEXBOR_VERSION="' + lexbor_version + '"',
                       language: 'c')
 
@@ -238,20 +243,22 @@ endif
 add_project_arguments('-DNS_BUILD_DATE="' + build_date + '"', language: 'c')
 add_project_arguments('-DNS_VERSION="' + meson.project_version() + '"', language: 'c')
 
-cmake = import('cmake')
-lexbor_opts = cmake.subproject_options()
-lexbor_opts.add_cmake_defines({
-  'LEXBOR_BUILD_SHARED': false,
-  'LEXBOR_BUILD_STATIC': true,
-  'LEXBOR_BUILD_TESTS': false,
-  'LEXBOR_BUILD_EXAMPLES': false,
-  'LEXBOR_BUILD_UTILS': false,
-  'LEXBOR_BUILD_SEPARATELY': false,
-  'CMAKE_POSITION_INDEPENDENT_CODE': true,
-})
-lexbor_opts.append_compile_args('c', '-w')
-lexbor_subproject = cmake.subproject('lexbor', options: lexbor_opts)
-liblexbor = lexbor_subproject.dependency('lexbor_static').as_system('system')
+if not liblexbor.found()
+  cmake = import('cmake')
+  lexbor_opts = cmake.subproject_options()
+  lexbor_opts.add_cmake_defines({
+    'LEXBOR_BUILD_SHARED': false,
+    'LEXBOR_BUILD_STATIC': true,
+    'LEXBOR_BUILD_TESTS': false,
+    'LEXBOR_BUILD_EXAMPLES': false,
+    'LEXBOR_BUILD_UTILS': false,
+    'LEXBOR_BUILD_SEPARATELY': false,
+    'CMAKE_POSITION_INDEPENDENT_CODE': true,
+  })
+  lexbor_opts.append_compile_args('c', '-w')
+  lexbor_subproject = cmake.subproject('lexbor', options: lexbor_opts)
+  liblexbor = lexbor_subproject.dependency('lexbor_static').as_system('system')
+endif
 
 libquickjs = dependency('quickjs-ng', fallback: ['quickjs-ng', 'qjs_dep'])
 
