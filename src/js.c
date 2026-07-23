@@ -22112,7 +22112,7 @@ static void
 ns_js_set_attr_recorded_len(ns_js *js, ns_node *n, const char *name,
                             const char *value, gssize len)
 {
-    if (!n || !name) return;
+    if (!n || n->kind != NS_NODE_ELEMENT || !name) return;
     gsize vlen = len < 0 ? (value ? strlen(value) : 0) : (gsize)len;
     const char *new_value = value ? value : "";
     gsize old_len = 0;
@@ -37321,7 +37321,7 @@ static const char ns_iframe_global_bootstrap[] =
     "    var pnames = Object.getOwnPropertyNames(realWin);"
     "    for (var pi = 0; pi < pnames.length; pi++) {"
     "      var pk = pnames[pi];"
-    "      if (Object.prototype.hasOwnProperty.call(G, pk)) continue;"
+    "      if (Object.prototype.hasOwnProperty.call(G, pk) && pk!=='performance') continue;"
     "      try {"
     "        var pd = Object.getOwnPropertyDescriptor(realWin, pk);"
     "        if (pd) Object.defineProperty(G, pk, pd);"
@@ -38449,12 +38449,9 @@ ns_document_has_focus(JSContext *ctx, JSValueConst this_val,
 static gboolean
 ns_point_in_hit_bounds(ns_js *js, double x, double y)
 {
+    (void)js;
     double w = ns_css_viewport_w();
     double h = ns_css_viewport_h();
-    if (js->layout_root) {
-        if (js->layout_root->content_width  > w) w = js->layout_root->content_width;
-        if (js->layout_root->content_height > h) h = js->layout_root->content_height;
-    }
     return x <= w && y <= h;
 }
 
@@ -38463,11 +38460,16 @@ ns_document_element_from_point(JSContext *ctx, JSValueConst this_val,
                                int argc, JSValueConst *argv)
 {
     (void)this_val;
-    if (argc < 2) return JS_NULL;
+    if (argc < 2)
+        return JS_ThrowTypeError(ctx,
+            "2 arguments required, but only %d present", argc);
     double x = 0, y = 0;
-    JS_ToFloat64(ctx, &x, argv[0]);
-    JS_ToFloat64(ctx, &y, argv[1]);
-    if (!isfinite(x) || !isfinite(y) || x < 0 || y < 0) return JS_NULL;
+    if (JS_ToFloat64(ctx, &x, argv[0]) < 0 ||
+        JS_ToFloat64(ctx, &y, argv[1]) < 0)
+        return JS_EXCEPTION;
+    if (!isfinite(x) || !isfinite(y))
+        return JS_ThrowTypeError(ctx, "coordinates must be finite");
+    if (x < 0 || y < 0) return JS_NULL;
     ns_js *js = js_from_ctx(ctx);
     if (!js || !js->current_doc) return JS_NULL;
     ns_js_flush_layout(js);
@@ -38475,8 +38477,8 @@ ns_document_element_from_point(JSContext *ctx, JSValueConst this_val,
     if (!ns_point_in_hit_bounds(js, x, y)) return JS_NULL;
     x += ns_window_scroll_prop(ctx, "scrollX");
     y += ns_window_scroll_prop(ctx, "scrollY");
-    const ns_box *hit = ns_box_hit_test(js->layout_root, x, y);
-    return hit && hit->dom ? ns_make_element(ctx, hit->dom) : JS_NULL;
+    const ns_node *hit = ns_box_hit_dom(js->layout_root, x, y);
+    return hit ? ns_make_element(ctx, hit) : JS_NULL;
 }
 
 static JSValue
@@ -38484,20 +38486,27 @@ ns_document_elements_from_point(JSContext *ctx, JSValueConst this_val,
                                 int argc, JSValueConst *argv)
 {
     (void)this_val;
-    JSValue arr = JS_NewArray(ctx);
-    if (argc < 2) return arr;
+    if (argc < 2)
+        return JS_ThrowTypeError(ctx,
+            "2 arguments required, but only %d present", argc);
     double x = 0, y = 0;
-    JS_ToFloat64(ctx, &x, argv[0]);
-    JS_ToFloat64(ctx, &y, argv[1]);
-    if (!isfinite(x) || !isfinite(y) || x < 0 || y < 0) return arr;
+    if (JS_ToFloat64(ctx, &x, argv[0]) < 0 ||
+        JS_ToFloat64(ctx, &y, argv[1]) < 0)
+        return JS_EXCEPTION;
+    if (!isfinite(x) || !isfinite(y))
+        return JS_ThrowTypeError(ctx, "coordinates must be finite");
+    JSValue arr = JS_NewArray(ctx);
+    if (x < 0 || y < 0) return arr;
     ns_js *js = js_from_ctx(ctx);
     if (!js || !js->current_doc) return arr;
     ns_js_flush_layout(js);
     if (!js->layout_root) return arr;
     if (!ns_point_in_hit_bounds(js, x, y)) return arr;
-    const ns_box *hit = ns_box_hit_test(js->layout_root, x, y);
+    x += ns_window_scroll_prop(ctx, "scrollX");
+    y += ns_window_scroll_prop(ctx, "scrollY");
+    const ns_node *hit = ns_box_hit_dom(js->layout_root, x, y);
     uint32_t i = 0;
-    for (const ns_node *n = hit && hit->dom ? hit->dom : NULL; n; n = n->parent)
+    for (const ns_node *n = hit; n; n = n->parent)
         if (n->kind == NS_NODE_ELEMENT)
             JS_SetPropertyUint32(ctx, arr, i++, ns_make_element(ctx, n));
     return arr;
@@ -46964,6 +46973,36 @@ ns_js_module_loader(JSContext *ctx, const char *module_name, void *opaque,
         JSValue func_val =
             ns_js_compile_module_cached(ctx, body, body_len, module_name);
         g_free(body);
+        if (JS_IsException(func_val)) {
+            ns_js_log_module_compile_error(js, ctx, module_name);
+            return NULL;
+        }
+        JSModuleDef *m = JS_VALUE_GET_PTR(func_val);
+        JS_FreeValue(ctx, func_val);
+        return m;
+    }
+    if (g_str_has_prefix(module_name, "blob:")) {
+        GBytes *blob = ns_js_blob_url_lookup(js, module_name, NULL);
+        if (!blob) {
+            JS_ThrowReferenceError(ctx, "module blob URL not found: %s",
+                                   module_name);
+            return NULL;
+        }
+        gsize body_len = 0;
+        const char *body = g_bytes_get_data(blob, &body_len);
+        if (!body || body_len == 0 || body_len > NS_MAX_SCRIPT_BYTES) {
+            JS_ThrowReferenceError(ctx, "invalid blob module: %s", module_name);
+            return NULL;
+        }
+        if (js) js->module_load_bytes += body_len;
+        if (json_module) {
+            JSModuleDef *m = ns_js_make_json_module(ctx, module_name,
+                                                    body, body_len);
+            if (!m) ns_js_log_module_compile_error(js, ctx, module_name);
+            return m;
+        }
+        JSValue func_val =
+            ns_js_compile_module_cached(ctx, body, body_len, module_name);
         if (JS_IsException(func_val)) {
             ns_js_log_module_compile_error(js, ctx, module_name);
             return NULL;

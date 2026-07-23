@@ -807,15 +807,13 @@ headless_click(headless_flush_ctx *fc, headless_nav_capture *nav,
 {
     ns_box *layout = *fc->layout;
     if (!layout) return;
-    const ns_link_range *link = ns_box_hit_link_range(layout, x, y);
-    const ns_node *form_target = ns_box_hit_form_dom(layout, x, y);
-    const ns_node *inline_target = ns_box_hit_inline_dom(layout, x, y);
     const ns_box *hit = ns_box_hit_test(layout, x, y);
-    const ns_node *dom = form_target ? form_target
-                       : inline_target ? inline_target
-                       : link ? link->dom
-                       : hit ? hit->dom : NULL;
+    const ns_node *dom = ns_box_hit_dom(layout, x, y);
     if (!dom) { fc->focused = NULL; return; }
+    gboolean form_target = ns_node_is_element_named(dom, "button") ||
+                           ns_node_is_element_named(dom, "input") ||
+                           ns_node_is_element_named(dom, "select") ||
+                           ns_node_is_element_named(dom, "textarea");
     if (!form_target) {
         for (const ns_node *lc = dom; lc; lc = lc->parent) {
             if (!ns_node_is_element_named(lc, "label")) continue;
@@ -894,11 +892,6 @@ headless_click(headless_flush_ctx *fc, headless_nav_capture *nav,
                 return;
             }
         }
-    }
-    if (link && link->href && *link->href && nav) {
-        g_free(nav->pending_url);
-        nav->pending_url = g_strdup(link->href);
-        return;
     }
     if (nav) {
         for (const ns_node *cur = dom; cur; cur = cur->parent) {
@@ -1278,10 +1271,8 @@ headless_run_actions(headless_flush_ctx *fc, headless_nav_capture *nav,
             double x = 0, y = 0;
             if (sscanf(a + 11, "%lf , %lf", &x, &y) == 2) {
                 ns_box *layout = *fc->layout;
-                const ns_node *ft = layout ? ns_box_hit_form_dom(layout, x, y) : NULL;
-                const ns_node *it = layout ? ns_box_hit_inline_dom(layout, x, y) : NULL;
-                const ns_box *hit = layout ? ns_box_hit_test(layout, x, y) : NULL;
-                const ns_node *dom = ft ? ft : it ? it : hit ? hit->dom : NULL;
+                const ns_node *dom = layout
+                    ? ns_box_hit_dom(layout, x, y) : NULL;
                 if (dom && fc->js) {
                     gboolean prevented = FALSE;
                     ns_js_dispatch_mouse_event(fc->js, dom, "contextmenu",

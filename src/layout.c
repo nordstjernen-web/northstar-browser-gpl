@@ -11404,18 +11404,16 @@ ns_box_hit_test(const ns_box *root, double x, double y)
         }
     if (best) return best;
 self_test: ;
-    double x0 = root->x;
-    double y0 = root->y;
     gboolean block_edges = root->kind == NS_BOX_BLOCK ||
                            root->kind == NS_BOX_TABLE_CAPTION;
+    double x0 = root->x + (block_edges ? root->margin.left : 0);
+    double y0 = root->y + (block_edges ? root->margin.top : 0);
     double x1 = x0 + root->content_width
               + (block_edges ? root->padding.left + root->padding.right +
-                               root->border.left + root->border.right +
-                               root->margin.left + root->margin.right : 0);
+                               root->border.left + root->border.right : 0);
     double y1 = y0 + root->content_height
               + (block_edges ? root->padding.top + root->padding.bottom +
-                               root->border.top + root->border.bottom +
-                               root->margin.top + root->margin.bottom : 0);
+                               root->border.top + root->border.bottom : 0);
     if (!box_blocks_hit_testing(root) &&
         x >= x0 && x <= x1 && y >= y0 && y <= y1 && root->dom)
         return root;
@@ -11584,6 +11582,31 @@ ns_box_hit_inline_dom(const ns_box *root, double x, double y)
         }
     }
     return best;
+}
+
+static gboolean
+hit_nodes_related(const ns_node *a, const ns_node *b)
+{
+    if (!a || !b) return FALSE;
+    for (const ns_node *n = a; n; n = n->parent)
+        if (n == b) return TRUE;
+    for (const ns_node *n = b; n; n = n->parent)
+        if (n == a) return TRUE;
+    return FALSE;
+}
+
+const ns_node *
+ns_box_hit_dom(const ns_box *root, double x, double y)
+{
+    const ns_box *hit = ns_box_hit_test(root, x, y);
+    const ns_node *target = hit ? hit->dom : NULL;
+    const ns_node *inline_target = ns_box_hit_inline_dom(root, x, y);
+    if (inline_target && (!target || hit_nodes_related(target, inline_target)))
+        target = inline_target;
+    const ns_node *form_target = ns_box_hit_form_dom(root, x, y);
+    if (form_target && (!target || hit_nodes_related(target, form_target)))
+        target = form_target;
+    return target;
 }
 
 static void
