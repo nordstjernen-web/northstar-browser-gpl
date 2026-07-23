@@ -46,8 +46,10 @@ jobs:
             build-essential ccache pkg-config meson ninja-build cmake git \
             libgtk-4-dev libcurl4-openssl-dev libssl-dev \
             libuchardet-dev librsvg2-dev libpsl-dev libsqlite3-dev \
-            libseccomp-dev libavif-dev libsdl2-dev libenchant-2-dev \
+            libseccomp-dev libavif-dev libsdl2-dev \
             fontconfig fonts-dejavu-core ca-certificates file
+          apt-get install -y libenchant-2-dev hunspell-en-us || \
+            echo "optional spell-check packages not installable; building without enchant"
 
       - name: Checkout
         uses: actions/checkout@v6
@@ -84,7 +86,7 @@ jobs:
           meson compile -C builddir 2>&1 | tee build.log
 
       - name: ccache stats
-        if: always()
+        if: always() && (steps.build.outcome == 'success' || steps.build.outcome == 'failure')
         run: ccache --show-stats
 
       - name: Smoke test (binary present and executable)
