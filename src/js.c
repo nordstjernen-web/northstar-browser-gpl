@@ -190,6 +190,7 @@ static void ns_js_drain_deferred_scripts(ns_js *js);
 static void ns_js_drain_async_script_roots(ns_js *js);
 static void ns_js_schedule_pending_script_drain(ns_js *js);
 static void ns_js_run_inserted_scripts(ns_js *js, ns_node *root);
+static void ns_js_rescan_subtree_images(ns_js *js, ns_node *root, int depth);
 static void ns_js_schedule_iframe_load(ns_js *js, ns_node *iframe);
 static void ns_js_schedule_iframe_load_full(ns_js *js, ns_node *iframe,
                                             gboolean force);
@@ -3314,6 +3315,7 @@ static JSClassDef ns_window_named_class = {
 
 static void ns_js_start_image_load(ns_js *js, ns_node *el, const char *src);
 static void ns_js_flush_ready_images(ns_js *js);
+static const char *ns_js_node_doc_base(ns_js *js, const ns_node *el);
 
 static ns_node *
 ns_unwrap_element_mut(JSValueConst val)
@@ -24852,8 +24854,11 @@ ns_js_dispatch_built_event(ns_js *js, const ns_node *target, const char *type,
         g_array_append_val(shadow_flags, flag);
     }
 
-    gboolean window_in_path = path->len > 0 &&
-        path->pdata[path->len - 1] == (gpointer)js->current_doc;
+    const ns_node *path_tail = path->len > 0
+        ? g_ptr_array_index(path, path->len - 1) : NULL;
+    gboolean window_in_path = path_tail &&
+        path_tail->kind == NS_NODE_DOCUMENT &&
+        !(path_tail->flags & NS_NODE_FRAGMENT);
 
     JSValue bub0 = JS_GetPropertyStr(js->ctx, event, "bubbles");
     gboolean bubbles = JS_ToBool(js->ctx, bub0) ? TRUE : FALSE;
@@ -30068,8 +30073,8 @@ ns_element_img_current_src(JSContext *ctx, JSValueConst this_val)
     char *chosen = ns_img_chosen_url(sel);
     if (!chosen || !*chosen) { g_free(chosen); return JS_NewString(ctx, ""); }
     ns_js *js = js_from_ctx(ctx);
-    char *abs_url = (js && js->current_url)
-        ? ns_url_resolve(js->current_url, chosen) : NULL;
+    const char *base = js ? ns_js_node_doc_base(js, n) : NULL;
+    char *abs_url = base ? ns_url_resolve(base, chosen) : NULL;
     JSValue r = JS_NewString(ctx, abs_url ? abs_url : chosen);
     g_free(abs_url);
     g_free(chosen);
@@ -35233,6 +35238,43 @@ typedef struct ns_js_image_load {
     guint      ready_idle;
 } ns_js_image_load;
 
+static const char *
+ns_js_node_doc_base(ns_js *js, const ns_node *el)
+{
+    for (const ns_node *p = el ? el->parent : NULL; p; p = p->parent) {
+        if (ns_node_is_element_named(p, "iframe") ||
+            ns_node_is_element_named(p, "frame") ||
+            ns_node_is_element_named(p, "object")) {
+            const char *fu = ns_element_get_attr(p, "data-nd-frame-url");
+            if (fu && *fu) return fu;
+        }
+    }
+    return js ? js->current_url : NULL;
+}
+
+static void
+ns_js_rescan_subtree_images(ns_js *js, ns_node *root, int depth)
+{
+    if (!js || !root || depth >= 512) return;
+    if (root->kind == NS_NODE_ELEMENT && root->name &&
+        strcmp(root->name, "img") == 0) {
+        const char *src = ns_element_get_attr(root, "src");
+        ns_js_image_load *r = (src && *src && js->js_image_loads)
+            ? g_hash_table_lookup(js->js_image_loads, root) : NULL;
+        if (r && r->requested_url) {
+            const char *base = ns_js_node_doc_base(js, root);
+            char *abs = base ? ns_url_resolve(base, src) : NULL;
+            if (abs && strcmp(abs, r->requested_url) != 0) {
+                root->flags &= ~NS_NODE_IMG_LOAD_FIRED;
+                ns_js_start_image_load(js, root, src);
+            }
+            g_free(abs);
+        }
+    }
+    for (ns_node *c = root->first_child; c; c = c->next_sibling)
+        ns_js_rescan_subtree_images(js, c, depth + 1);
+}
+
 static void
 ns_js_flush_ready_images(ns_js *js)
 {
@@ -35286,13 +35328,16 @@ ns_js_image_ready_idle(gpointer data)
     if (g_hash_table_lookup(js->js_image_loads, r->el) != r)
         return G_SOURCE_REMOVE;
     const char *cur_src = ns_element_get_attr(r->el, "src");
+    const char *cur_base = ns_js_node_doc_base(js, r->el);
     char *abs_url = NULL;
-    if (cur_src && *cur_src && js->current_url)
-        abs_url = ns_url_resolve(js->current_url, cur_src);
+    if (cur_src && *cur_src && cur_base)
+        abs_url = ns_url_resolve(cur_base, cur_src);
     else if (cur_src)
         abs_url = g_strdup(cur_src);
     if (!abs_url || !r->requested_url || strcmp(abs_url, r->requested_url) != 0) {
         g_free(abs_url);
+        if (cur_src && *cur_src)
+            ns_js_start_image_load(js, r->el, cur_src);
         return G_SOURCE_REMOVE;
     }
     g_free(abs_url);
@@ -35344,8 +35389,8 @@ ns_js_start_image_load(ns_js *js, ns_node *el, const char *src)
         g_hash_table_remove(js->js_image_loads, el);
         return;
     }
-    char *abs_url = js->current_url ? ns_url_resolve(js->current_url, src)
-                                 : g_strdup(src);
+    const char *base = ns_js_node_doc_base(js, el);
+    char *abs_url = base ? ns_url_resolve(base, src) : g_strdup(src);
     if (!abs_url) {
         g_hash_table_remove(js->js_image_loads, el);
         return;
@@ -35357,7 +35402,7 @@ ns_js_start_image_load(ns_js *js, ns_node *el, const char *src)
     r->start_ms = ns_perf_now_ms(js);
     g_hash_table_insert(js->js_image_loads, el, r);
     r->img = ns_image_cache_get(js->image_cache, abs_url,
-                                js->current_url ? js->current_url : abs_url,
+                                base ? base : abs_url,
                                 ns_js_on_image_ready, r);
     if (r->img && (r->img->loaded || r->img->failed) && !r->ready_idle)
         r->ready_idle = g_idle_add(ns_js_image_ready_idle, r);
@@ -35374,8 +35419,8 @@ ns_js_image_for_node(ns_js *js, const ns_node *el)
     if (js->image_cache && el->name && strcmp(el->name, "img") == 0) {
         const char *src = ns_element_get_attr(el, "src");
         if (src && *src) {
-            char *abs_url = js->current_url ? ns_url_resolve(js->current_url, src)
-                                         : g_strdup(src);
+            const char *base = ns_js_node_doc_base(js, el);
+            char *abs_url = base ? ns_url_resolve(base, src) : g_strdup(src);
             if (abs_url) {
                 ns_image *im = ns_image_cache_peek(js->image_cache, abs_url);
                 g_free(abs_url);
@@ -44264,6 +44309,29 @@ ns_synthdoc_get_title(JSContext *ctx, JSValueConst this_val,
 }
 
 static JSValue
+ns_synthdoc_set_title(JSContext *ctx, JSValueConst this_val,
+                      int argc, JSValueConst *argv)
+{
+    ns_node *doc = ns_unwrap_element_mut(this_val);
+    if (!doc || argc < 1) return JS_UNDEFINED;
+    const char *s = JS_ToCString(ctx, argv[0]);
+    if (!s) return JS_UNDEFINED;
+    ns_node *t = ns_node_find_first_element(doc, "title");
+    if (!t) {
+        ns_node *head = ns_node_find_first_element(doc, "head");
+        if (!head) head = doc;
+        t = ns_node_new_element(g_strdup("title"));
+        ns_node_append_child(head, t);
+    }
+    ns_js *_j = js_from_ctx(ctx);
+    ns_js_clear_children(_j, t);
+    ns_node_append_child(t, ns_node_new_text(g_strdup(s)));
+    if (_j) _j->mutated = TRUE;
+    JS_FreeCString(ctx, s);
+    return JS_UNDEFINED;
+}
+
+static JSValue
 ns_synthdoc_get_forms(JSContext *ctx, JSValueConst this_val,
                       int argc, JSValueConst *argv)
 {
@@ -44370,7 +44438,8 @@ ns_make_realm_document(JSContext *ctx, ns_node *doc_node, const char *url,
     ns_synthdoc_define_accessor(ctx, w, "body", ns_synthdoc_get_body,
                                 ns_synthdoc_set_body);
     ns_synthdoc_define_getter(ctx, w, "head", ns_synthdoc_get_head);
-    ns_synthdoc_define_getter(ctx, w, "title", ns_synthdoc_get_title);
+    ns_synthdoc_define_accessor(ctx, w, "title", ns_synthdoc_get_title,
+                                ns_synthdoc_set_title);
     ns_synthdoc_define_getter(ctx, w, "forms", ns_synthdoc_get_forms);
     ns_synthdoc_define_getter(ctx, w, "images", ns_synthdoc_get_images);
     ns_document_define_implementation_getter(ctx, w);
@@ -44412,6 +44481,8 @@ ns_make_realm_document(JSContext *ctx, ns_node *doc_node, const char *url,
     ns_bind_fn(ctx, w, "createNodeIterator", ns_document_create_node_iterator, 3);
     ns_bind_fn(ctx, w, "elementFromPoint",   ns_document_element_from_point, 2);
     ns_bind_fn(ctx, w, "elementsFromPoint",  ns_document_elements_from_point, 2);
+    ns_bind_fn(ctx, w, "getSelection",       ns_window_get_selection, 0);
+    ns_bind_fn(ctx, w, "hasFocus",           ns_document_has_focus, 0);
     return w;
 }
 
@@ -48053,7 +48124,10 @@ ns_js_drain_async_script_roots(ns_js *js)
 static void
 ns_js_run_inserted_scripts(ns_js *js, ns_node *root)
 {
-    if (!js || !root || !js->current_doc || js->halted || js->in_pump) return;
+    if (!js || !root || !js->current_doc || js->halted) return;
+    if (js->js_image_loads && g_hash_table_size(js->js_image_loads) > 0)
+        ns_js_rescan_subtree_images(js, root, 0);
+    if (js->in_pump) return;
     if (js->ce_upgrading) return;
     if (!ns_js_root_connected(js, root)) return;
     ns_js_schedule_static_iframes(js, root);
