@@ -170,6 +170,7 @@ struct ns_js {
     GPtrArray    *async_script_roots;
     guint         async_script_source;
     GPtrArray    *pending_iframe_loads;
+    GHashTable   *pending_rejections;
     GHashTable   *iframe_globals;
     int           iframe_load_depth;
     GArray       *pending_storage_events;

@@ -1002,6 +1002,8 @@ ns_js_attach_idle(ns_js *js, GSourceFunc func, gpointer data)
 }
 
 static void ns_storage_drain_deferred_events(ns_js *js);
+static void ns_js_report_pending_rejections(ns_js *js);
+static void ns_js_drop_pending_rejections(ns_js *js);
 
 static void
 ns_drain_microtasks(ns_js *js)
@@ -1043,6 +1045,8 @@ ns_drain_microtasks(ns_js *js)
     }
     ns_js_budget_pop(js, &g);
     ns_storage_drain_deferred_events(js);
+    if (js->callback_depth == 0)
+        ns_js_report_pending_rejections(js);
 }
 
 static void ns_storage_flush(ns_js *js);
@@ -40069,32 +40073,80 @@ ns_js_console_time_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueC
     return JS_UNDEFINED;
 }
 
+typedef struct ns_pending_rejection {
+    JSContext *ctx;
+    JSValue    reason;
+} ns_pending_rejection;
+
+static void
+ns_pending_rejection_free(gpointer data)
+{
+    ns_pending_rejection *pr = data;
+    JS_FreeValue(pr->ctx, pr->reason);
+    g_free(pr);
+}
+
 static void
 ns_js_promise_rejection_tracker(JSContext *ctx, JSValueConst promise,
                                 JSValueConst reason, bool is_handled,
                                 void *opaque)
 {
-    (void)promise; (void)opaque;
-    if (is_handled) return;
+    (void)opaque;
     ns_js *js = js_from_ctx(ctx);
-    if (!js || !js->log_cb) return;
-    GString *out = g_string_new("[unhandled rejection] ");
-    if (JS_IsError(reason) || (JS_IsObject(reason) && !JS_IsFunction(ctx, reason))) {
-        ns_js_emit(js, out->str, ctx, 1, (JSValueConst[]){ reason });
-        g_string_free(out, TRUE);
+    if (!js) return;
+    gpointer key = JS_VALUE_GET_PTR(promise);
+    if (is_handled) {
+        if (js->pending_rejections)
+            g_hash_table_remove(js->pending_rejections, key);
         return;
     }
-    const char *s = JS_ToCString(ctx, reason);
-    if (s) { g_string_append(out, s); JS_FreeCString(ctx, s); }
-    JSValue probe = JS_NewError(ctx);
-    JSValue stack = JS_GetPropertyStr(ctx, probe, "stack");
-    const char *st = JS_ToCString(ctx, stack);
-    if (st && *st) g_string_append_printf(out, "\n%s", st);
-    if (st) JS_FreeCString(ctx, st);
-    JS_FreeValue(ctx, stack);
-    JS_FreeValue(ctx, probe);
-    js->log_cb(out->str, js->log_user_data);
-    g_string_free(out, TRUE);
+    if (!js->log_cb) return;
+    if (!js->pending_rejections)
+        js->pending_rejections =
+            g_hash_table_new_full(g_direct_hash, g_direct_equal,
+                                  NULL, ns_pending_rejection_free);
+    ns_pending_rejection *pr = g_new0(ns_pending_rejection, 1);
+    pr->ctx = ctx;
+    pr->reason = JS_DupValue(ctx, reason);
+    g_hash_table_replace(js->pending_rejections, key, pr);
+}
+
+static void
+ns_js_report_pending_rejections(ns_js *js)
+{
+    if (!js || !js->pending_rejections ||
+        g_hash_table_size(js->pending_rejections) == 0)
+        return;
+    GHashTable *batch = js->pending_rejections;
+    js->pending_rejections = NULL;
+    GHashTableIter it;
+    gpointer key, val;
+    g_hash_table_iter_init(&it, batch);
+    while (g_hash_table_iter_next(&it, &key, &val)) {
+        ns_pending_rejection *pr = val;
+        JSContext *ctx = pr->ctx;
+        JSValueConst reason = pr->reason;
+        if (!js->log_cb) continue;
+        GString *out = g_string_new("[unhandled rejection] ");
+        if (JS_IsError(reason) ||
+            (JS_IsObject(reason) && !JS_IsFunction(ctx, reason))) {
+            ns_js_emit(js, out->str, ctx, 1, (JSValueConst[]){ reason });
+        } else {
+            const char *s = JS_ToCString(ctx, reason);
+            if (s) { g_string_append(out, s); JS_FreeCString(ctx, s); }
+            js->log_cb(out->str, js->log_user_data);
+        }
+        g_string_free(out, TRUE);
+    }
+    g_hash_table_destroy(batch);
+}
+
+static void
+ns_js_drop_pending_rejections(ns_js *js)
+{
+    if (!js || !js->pending_rejections) return;
+    g_hash_table_destroy(js->pending_rejections);
+    js->pending_rejections = NULL;
 }
 
 static JSValue
@@ -42356,10 +42408,6 @@ ns_js_new(ns_js_log_cb log_cb, gpointer log_user_data,
     ns_bind_fn(ctx, storage, "persist",   ns_returns_resolved_false, 0);
     ns_bind_fn(ctx, storage, "persisted", ns_returns_resolved_false, 0);
     JS_SetPropertyStr(ctx, navigator, "storage", storage);
-
-    JSValue wake_lock = JS_NewObject(ctx);
-    ns_bind_fn(ctx, wake_lock, "request", ns_returns_rejected, 1);
-    JS_SetPropertyStr(ctx, navigator, "wakeLock", wake_lock);
 
     ns_bind_fn(ctx, navigator, "getInstalledRelatedApps",
                ns_returns_resolved_empty_array, 0);
@@ -45959,6 +46007,7 @@ ns_js_reset_runtime_state(ns_js *js)
             JS_FreeValue(js->ctx, JS_MKPTR(JS_TAG_OBJECT, val));
         g_hash_table_remove_all(js->frame_windows);
     }
+    ns_js_drop_pending_rejections(js);
     if (js->frame_ctxs) {
         for (guint i = 0; i < js->frame_ctxs->len; i++)
             JS_FreeContext(g_ptr_array_index(js->frame_ctxs, i));
@@ -46750,6 +46799,7 @@ ns_js_free(ns_js *js)
         g_hash_table_destroy(js->frame_windows);
         js->frame_windows = NULL;
     }
+    ns_js_drop_pending_rejections(js);
     if (js->frame_ctxs) {
         for (guint i = 0; i < js->frame_ctxs->len; i++)
             JS_FreeContext(g_ptr_array_index(js->frame_ctxs, i));
