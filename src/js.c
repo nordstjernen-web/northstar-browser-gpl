@@ -40373,6 +40373,9 @@ static void
 ns_ce_upgrade_element_with(ns_js *js, ns_node *node, JSValueConst klass)
 {
     if (!js || !node || !js->ctx) return;
+    if (js->ce_under_construction &&
+        g_hash_table_contains(js->ce_under_construction, node))
+        return;
     JSContext *ctx = js->ctx;
     JSValue elem = ns_make_element(ctx, node);
     if (!JS_IsObject(elem)) { JS_FreeValue(ctx, elem); return; }
@@ -40394,16 +40397,18 @@ ns_ce_upgrade_element_with(ns_js *js, ns_node *node, JSValueConst klass)
                               JS_DupValue(ctx, klass),
                               JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
 
+    if (!js->ce_under_construction)
+        js->ce_under_construction = g_hash_table_new(NULL, NULL);
+    g_hash_table_add(js->ce_under_construction, node);
+
     {
         ns_node *prev = js->ce_upgrading;
         void *prev_wrapper = js->ce_upgrading_wrapper;
         js->ce_upgrading = node;
         js->ce_upgrading_wrapper = JS_VALUE_GET_PTR(elem);
-        js->ce_constructing++;
         JSValue ctor_result = JS_CallConstructor(ctx, klass, 0, NULL);
         if (JS_IsException(ctor_result)) ns_ce_log_error(js, "constructor");
         JS_FreeValue(ctx, ctor_result);
-        js->ce_constructing--;
         js->ce_upgrading = prev;
         js->ce_upgrading_wrapper = prev_wrapper;
     }
@@ -40436,9 +40441,11 @@ ns_ce_upgrade_element_with(ns_js *js, ns_node *node, JSValueConst klass)
     }
     JS_FreeValue(ctx, observed);
 
+    g_hash_table_remove(js->ce_under_construction, node);
+
     ns_ce_fire_connected_if_needed(ctx, js, node, elem, klass);
 
-    if (js->ce_defer_upgrades == 0 && js->ce_constructing == 0)
+    if (js->ce_defer_upgrades == 0)
         for (ns_node *c = node->first_child; c; c = c->next_sibling)
             ns_ce_upgrade_subtree_all(js, c);
 
@@ -40514,7 +40521,7 @@ ns_ce_upgrade_subtree_named_rec(ns_js *js, ns_node *root,
                                 const char *target_name, int depth)
 {
     if (!js || !root || !target_name || depth >= 512) return;
-    if (js->ce_defer_upgrades > 0 || js->ce_constructing > 0) return;
+    if (js->ce_defer_upgrades > 0) return;
     if (ns_node_in_template_content(root)) return;
     if (root->kind == NS_NODE_ELEMENT && root->name) {
         JSValue *tslot = g_hash_table_lookup(js->ce_registry, target_name);
@@ -40539,7 +40546,7 @@ ns_ce_upgrade_subtree_all_rec(ns_js *js, ns_node *root, int depth)
 {
     if (!js || !root || !js->ce_registry || depth >= 512) return;
     if (g_hash_table_size(js->ce_registry) == 0) return;
-    if (js->ce_defer_upgrades > 0 || js->ce_constructing > 0) return;
+    if (js->ce_defer_upgrades > 0) return;
     if (ns_node_in_template_content(root)) return;
     if (root->kind == NS_NODE_ELEMENT && root->name) {
         JSValue klass = ns_ce_class_for_node(js, root);
@@ -40659,7 +40666,7 @@ ns_ce_define(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv
     g_hash_table_replace(js->ce_registry, g_strdup(name), slot);
     ns_css_register_defined_element(name);
 
-    if (js->current_doc && js->ce_constructing == 0) {
+    if (js->current_doc) {
         int saved = js->ce_defer_upgrades;
         js->ce_defer_upgrades = 0;
         ns_ce_upgrade_subtree_named(js, js->current_doc, name);
@@ -43070,7 +43077,7 @@ ns_js_new(ns_js_log_cb log_cb, gpointer log_user_data,
         JS_DefinePropertyGetSet(ctx, global, window_atom,
             JS_NewCFunction2(ctx, ns_window_get_window, "get window", 0,
                              JS_CFUNC_generic, 0),
-            JS_UNDEFINED, JS_PROP_ENUMERABLE);
+            JS_UNDEFINED, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE);
         JS_FreeAtom(ctx, window_atom);
     }
     JS_SetPropertyStr(ctx, global, "self",   JS_DupValue(ctx, global));
@@ -45928,6 +45935,8 @@ ns_js_reset_runtime_state(ns_js *js)
     if (js->ce_registry) g_hash_table_remove_all(js->ce_registry);
     ns_css_clear_defined_elements();
     if (js->ce_pending)  g_hash_table_remove_all(js->ce_pending);
+    if (js->ce_under_construction)
+        g_hash_table_remove_all(js->ce_under_construction);
     js->ce_in_attr_callback = 0;
 
     if (js->async_script_source) {
@@ -46737,6 +46746,10 @@ ns_js_free(ns_js *js)
     if (js->ce_pending) {
         g_hash_table_destroy(js->ce_pending);
         js->ce_pending = NULL;
+    }
+    if (js->ce_under_construction) {
+        g_hash_table_destroy(js->ce_under_construction);
+        js->ce_under_construction = NULL;
     }
     if (js->local_storage)   g_hash_table_destroy(js->local_storage);
     if (js->session_storage) g_hash_table_destroy(js->session_storage);
@@ -48727,7 +48740,9 @@ ns_js_run_iframe_modules(ns_js *js, GPtrArray *modules, const char *origin,
     JSValue old[G_N_ELEMENTS(names)];
     for (guint i = 0; i < G_N_ELEMENTS(names); i++) {
         old[i] = JS_GetPropertyStr(ctx, g, names[i]);
-        JS_SetPropertyStr(ctx, g, names[i], JS_DupValue(ctx, values[i]));
+        JS_DefinePropertyValueStr(ctx, g, names[i],
+                                  JS_DupValue(ctx, values[i]),
+                                  JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
     }
 
     JSValue old_zone = JS_GetPropertyStr(ctx, g, "Zone");
@@ -48756,7 +48771,8 @@ ns_js_run_iframe_modules(ns_js *js, GPtrArray *modules, const char *origin,
     }
 
     for (guint i = 0; i < G_N_ELEMENTS(names); i++)
-        JS_SetPropertyStr(ctx, g, names[i], old[i]);
+        JS_DefinePropertyValueStr(ctx, g, names[i], old[i],
+                                  JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
 
     JS_FreeValue(ctx, hist);
     JS_FreeValue(ctx, loc);
