@@ -23,6 +23,7 @@ typedef struct {
     const char *p;
     const char *end;
     GPtrArray  *ns_stack;
+    GHashTable *entities;
     gboolean    ok;
 } xml_parser;
 
@@ -73,23 +74,28 @@ xml_append_codepoint(GString *out, guint64 cp)
 }
 
 static char *
-xml_decode_text(const char *s, gsize len)
+xml_decode_text(xml_parser *xp, const char *s, gsize len)
 {
     GString *out = g_string_sized_new(len);
     const char *p = s, *end = s + len;
     while (p < end) {
         if (*p != '&') { g_string_append_c(out, *p++); continue; }
         const char *semi = memchr(p, ';', (gsize)(end - p));
-        if (!semi) { g_string_append_c(out, *p++); continue; }
+        if (!semi) { xp->ok = FALSE; break; }
         gsize elen = (gsize)(semi - p - 1);
         const char *e = p + 1;
-        if (elen == 0) { g_string_append_c(out, *p++); continue; }
+        if (elen == 0) { xp->ok = FALSE; break; }
         if (*e == '#') {
-            guint64 cp = 0;
-            if (elen >= 2 && (e[1] == 'x' || e[1] == 'X'))
-                cp = g_ascii_strtoull(e + 2, NULL, 16);
-            else
-                cp = g_ascii_strtoull(e + 1, NULL, 10);
+            gboolean hex = elen >= 2 && (e[1] == 'x' || e[1] == 'X');
+            const char *digits = e + (hex ? 2 : 1);
+            char *raw = g_strndup(digits, (gsize)(semi - digits));
+            char *num_end = NULL;
+            guint64 cp = g_ascii_strtoull(raw, &num_end, hex ? 16 : 10);
+            gboolean valid = num_end && num_end != raw && *num_end == '\0' &&
+                cp != 0 && cp <= 0x10FFFF &&
+                !(cp >= 0xD800 && cp <= 0xDFFF);
+            g_free(raw);
+            if (!valid) { xp->ok = FALSE; break; }
             xml_append_codepoint(out, cp);
             p = semi + 1;
             continue;
@@ -99,8 +105,13 @@ xml_decode_text(const char *s, gsize len)
         else if (elen == 2 && strncmp(e, "gt", 2) == 0)   g_string_append_c(out, '>');
         else if (elen == 4 && strncmp(e, "quot", 4) == 0) g_string_append_c(out, '"');
         else if (elen == 4 && strncmp(e, "apos", 4) == 0) g_string_append_c(out, '\'');
-        else if (elen == 4 && strncmp(e, "nbsp", 4) == 0) g_string_append(out, "\xC2\xA0");
-        else { g_string_append_c(out, '&'); p++; continue; }
+        else {
+            char *name = g_strndup(e, elen);
+            const char *value = g_hash_table_lookup(xp->entities, name);
+            g_free(name);
+            if (!value) { xp->ok = FALSE; break; }
+            g_string_append(out, value);
+        }
         p = semi + 1;
     }
     return g_string_free(out, FALSE);
@@ -143,6 +154,47 @@ xml_binding_free(gpointer p)
 static gboolean xml_parse_element(xml_parser *xp, ns_node *parent, int depth);
 
 static void
+xml_parse_internal_entities(xml_parser *xp, const char *p, const char *end)
+{
+    while (p < end && xp->ok) {
+        const char *decl = g_strstr_len(p, (gssize)(end - p), "<!ENTITY");
+        if (!decl) return;
+        p = decl + 8;
+        xml_parser name_parser = *xp;
+        name_parser.p = p;
+        name_parser.end = end;
+        xml_skip_space(&name_parser);
+        if (name_parser.p < end && *name_parser.p == '%') {
+            p = name_parser.p + 1;
+            continue;
+        }
+        char *name = xml_read_name(&name_parser);
+        if (!name) { xp->ok = FALSE; return; }
+        xml_skip_space(&name_parser);
+        if (name_parser.p >= end ||
+            (*name_parser.p != '"' && *name_parser.p != '\'')) {
+            g_free(name);
+            p = name_parser.p;
+            continue;
+        }
+        char quote = *name_parser.p++;
+        const char *value_start = name_parser.p;
+        while (name_parser.p < end && *name_parser.p != quote)
+            name_parser.p++;
+        if (name_parser.p >= end) {
+            g_free(name);
+            xp->ok = FALSE;
+            return;
+        }
+        char *value = xml_decode_text(
+            xp, value_start, (gsize)(name_parser.p - value_start));
+        if (xp->ok) g_hash_table_replace(xp->entities, name, value);
+        else { g_free(name); g_free(value); }
+        p = name_parser.p + 1;
+    }
+}
+
+static void
 xml_skip_misc_and_doctype(xml_parser *xp, ns_node *doc)
 {
     for (;;) {
@@ -152,8 +204,13 @@ xml_skip_misc_and_doctype(xml_parser *xp, ns_node *doc)
         if (c1 == '?') {
             const char *e = xp->p + 2;
             while (e + 1 < xp->end && !(e[0] == '?' && e[1] == '>')) e++;
-            if (e + 1 >= xp->end) { xp->p = xp->end; return; }
-            if (doc && !(xp->p[2] == 'x' && xp->p[3] == 'm' && xp->p[4] == 'l' &&
+            if (e + 1 >= xp->end) {
+                xp->p = xp->end;
+                xp->ok = FALSE;
+                return;
+            }
+            if (doc && !((e - xp->p) >= 5 &&
+                         xp->p[2] == 'x' && xp->p[3] == 'm' && xp->p[4] == 'l' &&
                          (e == xp->p + 5 || xml_is_space(xp->p[5])))) {
                 const char *t = xp->p + 2;
                 const char *tn = t;
@@ -173,7 +230,11 @@ xml_skip_misc_and_doctype(xml_parser *xp, ns_node *doc)
             if (xp->end - xp->p >= 4 && strncmp(xp->p, "<!--", 4) == 0) {
                 const char *e = xp->p + 4;
                 while (e + 2 < xp->end && strncmp(e, "-->", 3) != 0) e++;
-                if (e + 2 >= xp->end) { xp->p = xp->end; return; }
+                if (e + 2 >= xp->end) {
+                    xp->p = xp->end;
+                    xp->ok = FALSE;
+                    return;
+                }
                 if (doc)
                     ns_node_append_child(doc,
                         ns_node_new_comment(g_strndup(xp->p + 4,
@@ -189,6 +250,21 @@ xml_skip_misc_and_doctype(xml_parser *xp, ns_node *doc)
                     else if (*e == ']') { if (bracket > 0) bracket--; }
                     else if (*e == '>' && bracket == 0) break;
                     e++;
+                }
+                if (e >= xp->end) {
+                    xp->p = xp->end;
+                    xp->ok = FALSE;
+                    return;
+                }
+                const char *subset = memchr(xp->p + 9, '[',
+                    (gsize)(e - (xp->p + 9)));
+                if (subset) {
+                    const char *subset_end = e;
+                    while (subset_end > subset && subset_end[-1] != ']')
+                        subset_end--;
+                    if (subset_end > subset)
+                        xml_parse_internal_entities(xp, subset + 1,
+                                                    subset_end - 1);
                 }
                 if (doc) {
                     const char *t = xp->p + 9;
@@ -234,8 +310,23 @@ xml_parse_attributes(xml_parser *xp,
         const char *vs = xp->p;
         while (xp->p < xp->end && *xp->p != q) xp->p++;
         if (xp->p >= xp->end) { g_free(aname); xp->ok = FALSE; return FALSE; }
-        char *aval = xml_decode_text(vs, (gsize)(xp->p - vs));
+        char *aval = xml_decode_text(xp, vs, (gsize)(xp->p - vs));
         xp->p++;
+        if (!xp->ok) {
+            g_free(aname);
+            g_free(aval);
+            return FALSE;
+        }
+
+        for (guint i = 0; i < names->len; i++) {
+            const char *prior = g_ptr_array_index(names, i);
+            if (strcmp(prior, aname) == 0) {
+                g_free(aname);
+                g_free(aval);
+                xp->ok = FALSE;
+                return FALSE;
+            }
+        }
 
         if (strcmp(aname, "xmlns") == 0) {
             xml_push_binding(xp, NULL, aval);
@@ -252,21 +343,21 @@ xml_apply_namespace(ns_node *el, const char *qname, const char *uri)
 {
     const char *colon = strchr(qname, ':');
     gboolean has_prefix = colon != NULL;
-    el->flags |= NS_NODE_KEEP_CASE;
+    el->flags |= NS_NODE_KEEP_CASE | NS_NODE_XML_DOC;
+    if (has_prefix) {
+        char *prefix = g_strndup(qname, (gsize)(colon - qname));
+        ns_element_set_attr(el, "data-nd-ns-prefix", prefix);
+        g_free(prefix);
+    }
+    if (uri && *uri)
+        ns_element_set_attr(el, "data-nd-ns-uri", uri);
     if (uri && strcmp(uri, XML_NS_XHTML) == 0) {
-        if (has_prefix) {
-            char *prefix = g_strndup(qname, (gsize)(colon - qname));
-            ns_element_set_attr(el, "data-nd-ns-prefix", prefix);
-            g_free(prefix);
-        }
         return;
     }
     if (uri && strcmp(uri, XML_NS_SVG) == 0)
         el->flags |= NS_NODE_SVG_NS;
     else
         el->flags |= NS_NODE_FOREIGN_NS;
-    if (uri && *uri)
-        ns_element_set_attr(el, "data-nd-ns-uri", uri);
 }
 
 static gboolean
@@ -290,6 +381,15 @@ xml_parse_element(xml_parser *xp, ns_node *parent, int depth)
     const char *colon = strchr(qname, ':');
     char *prefix = colon ? g_strndup(qname, (gsize)(colon - qname)) : NULL;
     const char *el_uri = xml_lookup_prefix(xp, prefix);
+    if (prefix && !el_uri) {
+        xp->ok = FALSE;
+        g_free(prefix);
+        g_free(qname);
+        g_ptr_array_free(anames, TRUE);
+        g_ptr_array_free(avals, TRUE);
+        g_ptr_array_set_size(xp->ns_stack, base);
+        return FALSE;
+    }
 
     gboolean is_xhtml = el_uri && strcmp(el_uri, XML_NS_XHTML) == 0;
     char *stored = (is_xhtml && colon) ? g_strdup(colon + 1) : g_strdup(qname);
@@ -306,6 +406,7 @@ xml_parse_element(xml_parser *xp, ns_node *parent, int depth)
         } else if (acolon) {
             char *apfx = g_strndup(an, (gsize)(acolon - an));
             const char *auri = xml_lookup_prefix(xp, apfx);
+            if (!auri) xp->ok = FALSE;
             ns_element_set_attr_ns(el, auri, apfx, acolon + 1, an, av);
             g_free(apfx);
         } else {
@@ -315,6 +416,13 @@ xml_parse_element(xml_parser *xp, ns_node *parent, int depth)
     g_ptr_array_free(anames, TRUE);
     g_ptr_array_free(avals, TRUE);
     g_free(prefix);
+
+    if (!xp->ok) {
+        ns_node_free(el);
+        g_ptr_array_set_size(xp->ns_stack, base);
+        g_free(qname);
+        return FALSE;
+    }
 
     ns_node_append_child(parent, el);
 
@@ -330,6 +438,7 @@ xml_parse_element(xml_parser *xp, ns_node *parent, int depth)
     if (xp->p >= xp->end || *xp->p != '>') { xp->ok = FALSE; g_free(qname); return FALSE; }
     xp->p++;
 
+    gboolean closed = FALSE;
     while (xp->ok && xp->p < xp->end) {
         if (*xp->p == '<') {
             if (xp->end - xp->p >= 2 && xp->p[1] == '/') {
@@ -339,6 +448,7 @@ xml_parse_element(xml_parser *xp, ns_node *parent, int depth)
                 if (xp->p < xp->end && *xp->p == '>') xp->p++;
                 else xp->ok = FALSE;
                 if (!ename || strcmp(ename, qname) != 0) xp->ok = FALSE;
+                else closed = TRUE;
                 g_free(ename);
                 break;
             }
@@ -385,9 +495,11 @@ xml_parse_element(xml_parser *xp, ns_node *parent, int depth)
         }
         const char *ts = xp->p;
         while (xp->p < xp->end && *xp->p != '<') xp->p++;
-        char *txt = xml_decode_text(ts, (gsize)(xp->p - ts));
+        char *txt = xml_decode_text(xp, ts, (gsize)(xp->p - ts));
         ns_node_append_child(el, ns_node_new_text(txt));
     }
+
+    if (xp->ok && !closed) xp->ok = FALSE;
 
     g_ptr_array_set_size(xp->ns_stack, base);
     g_free(qname);
@@ -403,6 +515,8 @@ ns_xml_parse(const char *input, gssize len)
         .p = input,
         .end = input + n,
         .ns_stack = g_ptr_array_new_with_free_func(xml_binding_free),
+        .entities = g_hash_table_new_full(g_str_hash, g_str_equal,
+                                          g_free, g_free),
         .ok = TRUE,
     };
     if (n >= 3 && (unsigned char)xp.p[0] == 0xEF &&
@@ -410,6 +524,7 @@ ns_xml_parse(const char *input, gssize len)
         xp.p += 3;
 
     ns_node *doc = ns_node_new_document();
+    doc->flags |= NS_NODE_XML_DOC;
     xml_skip_misc_and_doctype(&xp, doc);
 
     ns_node *root = NULL;
@@ -424,8 +539,11 @@ ns_xml_parse(const char *input, gssize len)
 
     if (xp.ok)
         xml_skip_misc_and_doctype(&xp, doc);
+    if (xp.ok && xp.p != xp.end)
+        xp.ok = FALSE;
 
     g_ptr_array_free(xp.ns_stack, TRUE);
+    g_hash_table_destroy(xp.entities);
 
     if (!xp.ok || !root) {
         ns_node_free(doc);

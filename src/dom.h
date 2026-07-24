@@ -190,6 +190,7 @@ char       *ns_node_collect_all_text(const ns_node *root);
 char       *ns_node_inner_html(const ns_node *root);
 char       *ns_node_outer_html(const ns_node *node);
 char       *ns_node_xml_outer_html(const ns_node *node);
+char       *ns_node_xml_inner_html(const ns_node *node);
 
 typedef struct {
     gboolean           include_serializable;

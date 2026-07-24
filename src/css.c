@@ -14833,6 +14833,7 @@ ns_inline_style_set(const char *style, const char *prop, const char *value)
         g_string_append(out, ": ");
         g_string_append(out, value);
     }
+    if (out->len > 0) g_string_append_c(out, ';');
     return g_string_free(out, FALSE);
 }
 

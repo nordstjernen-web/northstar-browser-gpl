@@ -292,6 +292,8 @@ static JSValue ns_make_realm_document(JSContext *ctx, ns_node *doc_node,
                                       const char *url, const char *charset,
                                       const char *content_type,
                                       gboolean is_xml, gboolean inert);
+static void ns_document_use_document_prototype(JSContext *ctx,
+                                               JSValueConst obj);
 
 #define NS_SANDBOX_ACTIVE              (1u << 0)
 #define NS_SANDBOX_ALLOW_SCRIPTS       (1u << 1)
@@ -1516,6 +1518,11 @@ ns_style_get_own_property(JSContext *ctx, JSPropertyDescriptor *desc,
     const char *style = ns_element_get_attr(n, "style");
     char *val = ns_inline_style_get(style, css);
     if (val) ns_inline_value_strip_important(val);
+    if (val && !(css[0] == '-' && css[1] == '-') &&
+        !ns_css_named_declaration_valid(css, val)) {
+        g_free(val);
+        val = NULL;
+    }
     char *canon = val && !(css[0] == '-' && css[1] == '-')
         ? ns_css_specified_canonical(css, val) : NULL;
     g_free(css);
@@ -1583,9 +1590,10 @@ ns_style_set_property(JSContext *ctx, JSValueConst obj, JSAtom prop,
         JS_FreeCString(ctx, vstr);
         return TRUE;
     }
-    const char *old = ns_element_get_attr(n, "style");
+    char *old = ns_inline_style_serialize(ns_element_get_attr(n, "style"));
     char *new_style = ns_inline_style_set(old, css, vstr ? vstr : "");
     ns_js_set_attr_recorded(js_from_ctx(ctx), n, "style", new_style);
+    g_free(old);
     g_free(new_style);
     g_free(css);
     if (vstr) JS_FreeCString(ctx, vstr);
@@ -2860,11 +2868,12 @@ ns_style_setProperty(JSContext *ctx, JSValueConst this_val,
     gboolean priority_valid = !priority || !*priority || important;
     if (name && (!value || !*value || priority_valid) &&
         (!value || !*value || ns_css_named_declaration_valid(css_name, value))) {
-        const char *old = ns_element_get_attr(n, "style");
+        char *old = ns_inline_style_serialize(ns_element_get_attr(n, "style"));
         char *stored = (value && *value && important)
                        ? g_strconcat(value, " !important", NULL)
                        : g_strdup(value ? value : "");
         char *new_style = ns_inline_style_set(old, css_name, stored);
+        g_free(old);
         g_free(stored);
         ns_js_set_attr_recorded(js_from_ctx(ctx), n, "style", new_style);
         g_free(new_style);
@@ -2886,7 +2895,9 @@ ns_style_removeProperty(JSContext *ctx, JSValueConst this_val,
     if (!name) return JS_NewString(ctx, "");
     const char *style = ns_element_get_attr(n, "style");
     char *old_val = ns_inline_style_get(style, name);
-    char *new_style = ns_inline_style_set(style, name, "");
+    char *serialized = ns_inline_style_serialize(style);
+    char *new_style = ns_inline_style_set(serialized, name, "");
+    g_free(serialized);
     ns_js_set_attr_recorded(js_from_ctx(ctx), n, "style", new_style);
     g_free(new_style);
     JS_FreeCString(ctx, name);
@@ -6356,7 +6367,9 @@ ns_element_get_innerHTML(JSContext *ctx, JSValueConst this_val)
 {
     const ns_node *n = ns_unwrap_element(this_val);
     if (!n) return JS_NewString(ctx, "");
-    char *html = ns_node_inner_html(n);
+    const ns_node *root = ns_node_root(n);
+    char *html = root && (root->flags & NS_NODE_XML_DOC)
+        ? ns_node_xml_inner_html(n) : ns_node_inner_html(n);
     JSValue v = JS_NewString(ctx, html ? html : "");
     g_free(html);
     return v;
@@ -6877,8 +6890,7 @@ ns_xml_serializeToString(JSContext *ctx, JSValueConst this_val,
     if (argc < 1) return JS_NewString(ctx, "");
     const ns_node *n = ns_unwrap_element(argv[0]);
     if (!n) return JS_NewString(ctx, "");
-    char *html = (n->flags & NS_NODE_XML_DOC)
-                     ? ns_node_xml_outer_html(n) : ns_node_outer_html(n);
+    char *html = ns_node_xml_outer_html(n);
     JSValue v = JS_NewString(ctx, html ? html : "");
     g_free(html);
     return v;
@@ -15131,13 +15143,26 @@ static JSValue
 ns_dom_parser_parseFromString(JSContext *ctx, JSValueConst this_val,
                               int argc, JSValueConst *argv)
 {
-    (void)this_val;
-    if (argc < 1) return JS_NULL;
+    if (argc < 2)
+        return JS_ThrowTypeError(ctx,
+            "DOMParser.parseFromString requires 2 arguments");
     const char *src = JS_ToCString(ctx, argv[0]);
-    if (!src) return JS_NULL;
-    const char *mime = (argc >= 2) ? JS_ToCString(ctx, argv[1]) : NULL;
-    gboolean as_xml = mime && (strstr(mime, "xml") != NULL ||
-                               strstr(mime, "svg") != NULL);
+    if (!src) return JS_EXCEPTION;
+    const char *mime = JS_ToCString(ctx, argv[1]);
+    if (!mime) {
+        JS_FreeCString(ctx, src);
+        return JS_EXCEPTION;
+    }
+    gboolean html = strcmp(mime, "text/html") == 0;
+    gboolean as_xml = strcmp(mime, "text/xml") == 0 ||
+                      strcmp(mime, "application/xml") == 0 ||
+                      strcmp(mime, "application/xhtml+xml") == 0 ||
+                      strcmp(mime, "image/svg+xml") == 0;
+    if (!html && !as_xml) {
+        JS_FreeCString(ctx, src);
+        JS_FreeCString(ctx, mime);
+        return JS_ThrowTypeError(ctx, "unsupported MIME type");
+    }
     ns_node *doc;
     if (as_xml) {
         doc = ns_xml_parse(src, -1);
@@ -15167,11 +15192,60 @@ ns_dom_parser_parseFromString(JSContext *ctx, JSValueConst this_val,
                                              mime, as_xml, TRUE);
     if (doc_url) JS_FreeCString(ctx, doc_url);
     JS_FreeValue(ctx, cu);
-    if (JS_IsObject(wrapper))
+    if (JS_IsObject(wrapper)) {
+        if (as_xml) ns_document_use_document_prototype(ctx, wrapper);
         JS_DefinePropertyValueStr(ctx, wrapper, "defaultView", JS_NULL,
                                   JS_PROP_C_W_E);
-    if (mime) JS_FreeCString(ctx, mime);
+        JS_DefinePropertyValueStr(ctx, wrapper, "readyState",
+                                  JS_NewString(ctx, "complete"),
+                                  JS_PROP_C_W_E);
+    }
+    JS_FreeCString(ctx, mime);
     return wrapper;
+}
+
+static JSValue
+ns_document_parseHTMLUnsafe(JSContext *ctx, JSValueConst this_val,
+                            int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx,
+            "Document.parseHTMLUnsafe requires 1 argument");
+    const char *src = JS_ToCString(ctx, argv[0]);
+    if (!src) return JS_EXCEPTION;
+    ns_node *doc = ns_html_parse_with_scripting(src, -1, FALSE);
+    JS_FreeCString(ctx, src);
+    if (!doc) return JS_NULL;
+    ns_html_convert_declarative_shadow(doc);
+    ns_mark_scripts_already_started(doc);
+    ns_js *js = js_from_ctx(ctx);
+    if (js) g_hash_table_add(js->orphan_nodes, doc);
+    JSValue wrapper = ns_make_realm_document(
+        ctx, doc, "about:blank", "UTF-8", "text/html",
+        FALSE, TRUE);
+    if (JS_IsObject(wrapper))
+        JS_DefinePropertyValueStr(ctx, wrapper, "readyState",
+                                  JS_NewString(ctx, "complete"),
+                                  JS_PROP_C_W_E);
+    return wrapper;
+}
+
+static JSValue
+ns_html_script_supports(JSContext *ctx, JSValueConst this_val,
+                        int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx,
+            "HTMLScriptElement.supports requires 1 argument");
+    const char *type = JS_ToCString(ctx, argv[0]);
+    if (!type) return JS_EXCEPTION;
+    gboolean supported = strcmp(type, "classic") == 0 ||
+                         strcmp(type, "module") == 0 ||
+                         strcmp(type, "importmap") == 0;
+    JS_FreeCString(ctx, type);
+    return JS_NewBool(ctx, supported);
 }
 
 static JSValue
@@ -31028,6 +31102,8 @@ ns_element_get_namespaceURI(JSContext *ctx, JSValueConst this_val)
         return JS_NewString(ctx, "http://www.w3.org/2000/svg");
     if (n && (n->flags & NS_NODE_FOREIGN_NS))
         return JS_NULL;
+    if (n && (n->flags & NS_NODE_XML_DOC))
+        return JS_NULL;
     return JS_NewString(ctx, "http://www.w3.org/1999/xhtml");
 }
 
@@ -31459,6 +31535,7 @@ ns_node_element_namespace(const ns_node *n)
     if (stored) return *stored ? stored : NULL;
     if (n->flags & NS_NODE_SVG_NS) return "http://www.w3.org/2000/svg";
     if (n->flags & NS_NODE_FOREIGN_NS) return NULL;
+    if (n->flags & NS_NODE_XML_DOC) return NULL;
     return "http://www.w3.org/1999/xhtml";
 }
 
@@ -36604,6 +36681,29 @@ ns_media_get_error(JSContext *ctx, JSValueConst this_val)
     JS_FreeValue(ctx, v);
     const ns_node *n = ns_unwrap_element(this_val);
     return ns_node_is_media_element(n) ? JS_NULL : JS_UNDEFINED;
+}
+
+static JSValue
+ns_media_error_get_code(JSContext *ctx, JSValueConst this_val,
+                        int argc, JSValueConst *argv)
+{
+    (void)argc; (void)argv;
+    JSValue value = JS_GetPropertyStr(ctx, this_val, "_nd_code");
+    int32_t code = 0;
+    if (!JS_IsUndefined(value)) JS_ToInt32(ctx, &code, value);
+    JS_FreeValue(ctx, value);
+    return JS_NewInt32(ctx, code);
+}
+
+static JSValue
+ns_media_error_get_message(JSContext *ctx, JSValueConst this_val,
+                           int argc, JSValueConst *argv)
+{
+    (void)argc; (void)argv;
+    JSValue value = JS_GetPropertyStr(ctx, this_val, "_nd_message");
+    if (JS_IsString(value)) return value;
+    JS_FreeValue(ctx, value);
+    return JS_NewString(ctx, "");
 }
 
 static JSValue
@@ -42508,6 +42608,34 @@ ns_js_new(ns_js_log_cb log_cb, gpointer log_user_data,
     ns_bind_ctor(ctx, global, "ClipboardItem", ns_clipboard_item_ctor, 1);
     ns_bind_ctor(ctx, global, "CustomStateSet", ns_custom_state_set_ctor, 0);
     ns_bind_ctor(ctx, global, "Audio",           ns_window_audio_ctor,           1);
+    ns_bind_ctor(ctx, global, "MediaError",      ns_illegal_constructor,          0);
+    {
+        static const char *const names[] = {
+            "MEDIA_ERR_ABORTED", "MEDIA_ERR_NETWORK", "MEDIA_ERR_DECODE",
+            "MEDIA_ERR_SRC_NOT_SUPPORTED",
+        };
+        JSValue ctor = JS_GetPropertyStr(ctx, global, "MediaError");
+        JSValue proto = JS_GetPropertyStr(ctx, ctor, "prototype");
+        for (gsize i = 0; i < G_N_ELEMENTS(names); i++) {
+            JS_DefinePropertyValueStr(ctx, ctor, names[i],
+                JS_NewInt32(ctx, (int32_t)i + 1), JS_PROP_ENUMERABLE);
+            JS_DefinePropertyValueStr(ctx, proto, names[i],
+                JS_NewInt32(ctx, (int32_t)i + 1), JS_PROP_ENUMERABLE);
+        }
+        JSAtom code_atom = JS_NewAtom(ctx, "code");
+        JSAtom message_atom = JS_NewAtom(ctx, "message");
+        JS_DefinePropertyGetSet(ctx, proto, code_atom,
+            JS_NewCFunction(ctx, ns_media_error_get_code, "get code", 0),
+            JS_UNDEFINED, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE);
+        JS_DefinePropertyGetSet(ctx, proto, message_atom,
+            JS_NewCFunction(ctx, ns_media_error_get_message, "get message", 0),
+            JS_UNDEFINED, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE);
+        JS_FreeAtom(ctx, code_atom);
+        JS_FreeAtom(ctx, message_atom);
+        ns_set_tostring_tag(ctx, proto, "MediaError");
+        JS_FreeValue(ctx, proto);
+        JS_FreeValue(ctx, ctor);
+    }
     ns_bind_ctor(ctx, global, "AudioContext",    ns_audio_context_ctor,          1);
     {
         JSValue ac = JS_GetPropertyStr(ctx, global, "AudioContext");
@@ -43461,7 +43589,7 @@ ns_document_createElementNS(JSContext *ctx, JSValueConst this_val,
     el->flags |= NS_NODE_NOT_PARSER_INSERTED;
     if (is_svg)       el->flags |= NS_NODE_SVG_NS;
     else if (!is_html) el->flags |= NS_NODE_FOREIGN_NS;
-    if (ns && !is_html)
+    if (ns)
         ns_element_set_attr(el, "data-nd-ns-uri", ns);
     if (is_html && has_prefix) {
         char *pfx = g_strndup(name, prefix_len);
@@ -44149,7 +44277,9 @@ ns_make_realm_document(JSContext *ctx, ns_node *doc_node, const char *url,
     JS_DefinePropertyValueStr(ctx, w, "baseURI",
         JS_NewString(ctx, u), JS_PROP_C_W_E);
     JS_DefinePropertyValueStr(ctx, w, "compatMode",
-        JS_NewString(ctx, "CSS1Compat"), JS_PROP_C_W_E);
+        JS_NewString(ctx, (doc_node->flags & NS_NODE_QUIRKS)
+                          ? "BackCompat" : "CSS1Compat"),
+        JS_PROP_C_W_E);
     JS_DefinePropertyValueStr(ctx, w, "characterSet",
         JS_NewString(ctx, cs), JS_PROP_C_W_E);
     JS_DefinePropertyValueStr(ctx, w, "charset",
@@ -44222,6 +44352,7 @@ ns_make_synth_xml_document(JSContext *ctx)
     ns_js *js = js_from_ctx(ctx);
     if (!js) return JS_NULL;
     ns_node *doc = ns_node_new_document();
+    doc->flags |= NS_NODE_XML_DOC;
     g_hash_table_add(js->orphan_nodes, doc);
     JSValue wrapper = ns_make_realm_document(ctx, doc, "about:blank", "UTF-8",
                                              "application/xml", TRUE, TRUE);
@@ -45925,7 +46056,8 @@ ns_document_lift_methods_to_proto(JSContext *ctx, JSValueConst document)
 }
 
 static void
-ns_js_install_document(ns_js *js, ns_node *doc, const char *base_url)
+ns_js_install_document(ns_js *js, ns_node *doc, const char *base_url,
+                       const char *charset)
 {
     ns_js_reset_runtime_state(js);
 
@@ -45952,16 +46084,17 @@ ns_js_install_document(ns_js *js, ns_node *doc, const char *base_url)
     JSContext *ctx = js->ctx;
     JSValue global = JS_GetGlobalObject(ctx);
     ns_sw_prepare_document(js);
+    const char *cs = charset && *charset ? charset : "UTF-8";
 
     JSValue document = JS_NewObjectClass(ctx, ns_element_class_id);
     if (js->current_doc) JS_SetOpaque(document, js->current_doc);
     JS_SetPropertyStr(ctx, document, "URL",         JS_NewString(ctx, js->current_url));
     JS_SetPropertyStr(ctx, document, "documentURI", JS_NewString(ctx, js->current_url));
     JS_SetPropertyStr(ctx, document, "baseURI",     JS_NewString(ctx, js->current_url));
-    JS_SetPropertyStr(ctx, document, "characterSet", JS_NewString(ctx, "UTF-8"));
+    JS_SetPropertyStr(ctx, document, "characterSet", JS_NewString(ctx, cs));
     JS_DefinePropertyValueStr(ctx, document, "charset",
-                              JS_NewString(ctx, "UTF-8"), JS_PROP_C_W_E);
-    JS_SetPropertyStr(ctx, document, "inputEncoding", JS_NewString(ctx, "UTF-8"));
+                              JS_NewString(ctx, cs), JS_PROP_C_W_E);
+    JS_SetPropertyStr(ctx, document, "inputEncoding", JS_NewString(ctx, cs));
     JS_SetPropertyStr(ctx, document, "contentType",  JS_NewString(ctx, "text/html"));
     {
         char *dom_host = ns_url_host_from(js->current_url);
@@ -46113,6 +46246,19 @@ ns_js_install_document(ns_js *js, ns_node *doc, const char *base_url)
         { "Crypto", 0 }, { "SubtleCrypto", 0 }, { "CryptoKey", 0 },
     };
     ns_bind_ctors(ctx, global, ns_window_event_ctor, shim_ctors, G_N_ELEMENTS(shim_ctors));
+    {
+        JSValue ctor = JS_GetPropertyStr(ctx, global, "Document");
+        if (JS_IsObject(ctor))
+            ns_bind_fn(ctx, ctor, "parseHTMLUnsafe",
+                       ns_document_parseHTMLUnsafe, 1);
+        JS_FreeValue(ctx, ctor);
+    }
+    {
+        JSValue ctor = JS_GetPropertyStr(ctx, global, "HTMLScriptElement");
+        if (JS_IsObject(ctor))
+            ns_bind_fn(ctx, ctor, "supports", ns_html_script_supports, 1);
+        JS_FreeValue(ctx, ctor);
+    }
     {
         JSValue implementation_proto =
             ns_proto_of(ctx, global, "DOMImplementation");
@@ -49188,7 +49334,8 @@ ns_js_schedule_static_iframes(ns_js *js, ns_node *n)
 }
 
 void
-ns_js_run_scripts_in_doc(ns_js *js, ns_node *doc, const char *base_url_borrowed)
+ns_js_run_scripts_in_doc(ns_js *js, ns_node *doc,
+                         const char *base_url_borrowed, const char *charset)
 {
     if (!js || !doc) return;
     g_autofree char *base_url = g_strdup(base_url_borrowed);
@@ -49201,7 +49348,7 @@ ns_js_run_scripts_in_doc(ns_js *js, ns_node *doc, const char *base_url_borrowed)
     ns_js_set_navigation_milestone(js,
         &js->navigation_timing.dom_loading_ms, "domLoading");
     gint64 t0 = profile ? g_get_monotonic_time() : 0;
-    ns_js_install_document(js, doc, base_url);
+    ns_js_install_document(js, doc, base_url, charset);
     {
         const char *early = g_getenv("NS_EARLY_JS_FILE");
         char *early_src = NULL;

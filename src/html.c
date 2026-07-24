@@ -717,6 +717,7 @@ ns_html_decode_body_full(const char *body, gsize len,
         declared = charset_value_in(body, len < 1024 ? len : 1024);
     gboolean declared_utf8 = FALSE;
     if (declared) {
+        const char *canonical = ns_encoding_label_to_name(declared);
         char *cs = charset_normalize(declared);
         g_free(declared);
         if (g_ascii_strcasecmp(cs, "UTF-8") == 0) {
@@ -725,7 +726,7 @@ ns_html_decode_body_full(const char *body, gsize len,
             char *out = g_convert(body, (gssize)len, "UTF-8", cs,
                                   NULL, NULL, NULL);
             if (out) {
-                charset_report(charset_out, cs);
+                charset_report(charset_out, canonical ? canonical : cs);
                 g_free(cs);
                 return out;
             }
@@ -763,7 +764,9 @@ ns_html_decode_body_full(const char *body, gsize len,
             char *out = g_convert(body, (gssize)len, "UTF-8", charset,
                                   NULL, NULL, NULL);
             if (out) {
-                charset_report(charset_out, charset);
+                const char *canonical = ns_encoding_label_to_name(charset);
+                charset_report(charset_out,
+                               canonical ? canonical : charset);
                 g_free(charset);
                 return out;
             }
@@ -774,7 +777,7 @@ ns_html_decode_body_full(const char *body, gsize len,
     char *latin1 = g_convert(body, (gssize)len, "UTF-8", "WINDOWS-1252",
                              NULL, NULL, NULL);
     if (latin1) {
-        charset_report(charset_out, "WINDOWS-1252");
+        charset_report(charset_out, "windows-1252");
         return latin1;
     }
 

@@ -820,7 +820,7 @@ browser_build_from_doc(ns_node *doc, char *base, int viewport_width,
         ns_js_set_audio_cb(b->js, browser_js_audio, b);
         ns_js_add_csp_header(b->js, csp_header);
         browser_apply_meta_csp(b->js, doc, 0);
-        ns_js_run_scripts_in_doc(b->js, doc, base);
+        ns_js_run_scripts_in_doc(b->js, doc, base, b->doc_charset);
     }
     g_free(csp_header);
 

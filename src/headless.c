@@ -1794,7 +1794,8 @@ ns_headless_run_one(const ns_headless_opts *opts, const char *fetch_url, int hop
         ns_js_set_image_cache(js, image_cache);
         ns_js_set_layout_flush_cb(js, headless_flush_layout, &flush_ctx);
         if (opts->wpt) ns_js_set_early_inject_src(js, ns_wpt_hook_src);
-        ns_js_run_scripts_in_doc(js, doc, resp->final_url);
+        ns_js_run_scripts_in_doc(js, doc, resp->final_url,
+                                 g_headless_doc_charset);
     }
 
     if (opts->settle_ms > 0) settle_main_loop(opts->settle_ms, &flush_ctx);
